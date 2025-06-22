@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- League Selector (Top of Page) -->
+{% if leagues %}
+<div class="row mb-3">
+    <div class="col-md-4">
+        <select id="league-select" class="form-select">
+            {% for key, path in leagues.items() %}
+                <option value="{{ key }}" {% if league == key %}selected{% endif %}>
+                    {{ key|upper }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-8 align-self-center">
+        <small class="text-info ms-2">
+            Filter by league. Changing league reloads page with the selected league’s data.
+        </small>
+    </div>
+</div>
+<script>
+document.getElementById('league-select').addEventListener('change', function() {
+    const league = this.value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('league', league);
+    window.location.href = url.toString();
+});
+</script>
+{% endif %}
+
+<div class="row">
+    <div class="col-12">
+        <h2>🏏 Complete Advanced Head-to-Head Analysis</h2>
+        <p class="text-muted">
+            All features: Auto-filter, autocomplete, swap, add/remove, input persistence, column sorting, league & innings filter, and more.
+        </p>
+    </div>
+</div>
+
+<!-- Innings Filter Panel -->
+<div class="row mb-3">
+    <div class="col-md-3">
+        <select id="innings_filter_global" class="form-select">
+            <option value="0" {% if innings_filter == 0 %}selected{% endif %}>All Innings</option>
+            <option value="1" {% if innings_filter == 1 %}selected{% endif %}>1st Innings</option>
+            <option value="2" {% if innings_filter == 2 %}selected{% endif %}>2nd Innings</option>
+        </select>
+    </div>
+    <div class="col-md-9">
+        <small class="text-info ms-2">Filter all results by innings. Changing this reloads with your filter.</small>
+    </div>
+</div>
+
+<!-- Control Panel -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary active" id="toggle-dropdown">📋 Dropdown Mode</button>
+                    <button type="button" class="btn btn-outline-secondary" id="toggle-keyboard">⌨️ Keyboard Input</button>
+                    <form method="POST" style="display: inline;">
+                        <input type="hidden" name="analysis_type" value="reset">
+                        <input type="hidden" name="innings_filter" value="{{ innings_filter }}">
+                        <input type="hidden" name="league" value="{{ league }}">
+                        <button type="submit" class="btn btn-outline-warning">🔄 Reset All Inputs</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-end">
+                    <small class="text-muted" id="filter-status">All features active - Ready for analysis</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Single Player Analysis with Auto-Filtering -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>🎯 Single Player Matchup (Auto-Filtered)</h5>
+        <small class="text-muted">Smart filtering shows only players with actual matchups</small>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="single-form">
+            <input type="hidden" name="analysis_type" value="single">
+            <input type="hidden" name="innings_filter" value="{{ innings_filter }}">
+            <input type="hidden" name="league" value="{{ league }}">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">🎯 Select Bowler</label>
+                    <div class="input-mode dropdown-mode">
+                        <select id="bowler_select" name="bowler" class="form-select">
+                            <option value="">-- Choose a Bowler --</option>
+                            {% for b in all_bowlers %}
+                            <option value="{{ b }}" {% if saved_inputs.single_bowler == b %}selected{% endif %}>{{ b }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted" id="bowler-status">All bowlers available</small>
+                    </div>
+                    <div class="input-mode keyboard-mode" style="display: none;">
+                        <div class="position-relative">
+                            <input type="text" id="bowler_input" class="form-control autocomplete-input"
+                                   placeholder="Type bowler last name..." value="{{ saved_inputs.single_bowler }}"
+                                   autocomplete="off">
+                            <div id="bowler_suggestions" class="suggestions-dropdown"></div>
+                        </div>
+                        <small class="text-success">✨ Type to search with autocomplete</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">🏏 Select Batsman</label>
+                    <div class="input-mode dropdown-mode">
+                        <select id="batsman_select" name="batsman" class="form-select">
+                            <option value="">-- Choose a Batsman --</option>
+                            {% for b in all_batsmen %}
+                            <option value="{{ b }}" {% if saved_inputs.single_batsman == b %}selected{% endif %}>{{ b }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted" id="batsman-status">All batsmen available</small>
+                    </div>
+                    <div class="input-mode keyboard-mode" style="display: none;">
+                        <div class="position-relative">
+                            <input type="text" id="batsman_input" class="form-control autocomplete-input"
+                                   placeholder="Type batsman last name..." value="{{ saved_inputs.single_batsman }}"
+                                   autocomplete="off">
+                            <div id="batsman_suggestions" class="suggestions-dropdown"></div>
+                        </div>
+                        <small class="text-success">✨ Type to search with autocomplete</small>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary btn-lg">🔍 Find Matchup</button>
+                    <button type="button" class="btn btn-outline-info" id="swap-single-players">🔄 Swap Players</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Multiple Players Analysis with all features -->
+<div class="card mb-4">
+    <div class="card-header">
+        <div class="row">
+            <div class="col-md-8">
+                <h5>⚔️ Multiple Players Analysis</h5>
+                <small class="text-muted">Inputs auto-saved, autocomplete enabled, swap, toggles, add/remove available</small>
+            </div>
+            <div class="col-md-4 text-end">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="swap-multi-btn">🔄 Swap All Players</button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="multiple-form">
+            <input type="hidden" name="analysis_type" value="multiple">
+            <input type="hidden" name="innings_filter" value="{{ innings_filter }}">
+            <input type="hidden" name="league" value="{{ league }}">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">🎯 Multiple Bowlers</label>
+                    <div id="bowlers_container">
+                        {% if saved_inputs.multiple_bowlers %}
+                            {% for bowler in saved_inputs.multiple_bowlers %}
+                            <div class="input-group mb-2">
+                                <input type="text" name="bowlers[]" class="form-control multi-input"
+                                       value="{{ bowler }}" placeholder="Type bowler name..."
+                                       data-type="bowler" autocomplete="off">
+                                <button type="button" class="btn btn-danger remove-input">-</button>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                        <div class="input-group mb-2">
+                            <input type="text" name="bowlers[]" class="form-control multi-input"
+                                   placeholder="Type bowler last name..." data-type="bowler" autocomplete="off">
+                            <button type="button" class="btn btn-success add-bowler">+</button>
+                        </div>
+                    </div>
+                    <small class="text-muted" id="multi-bowler-status">Add bowlers to filter batsmen</small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">🏏 Multiple Batsmen</label>
+                    <div id="batsmen_container">
+                        {% if saved_inputs.multiple_batsmen %}
+                            {% for batsman in saved_inputs.multiple_batsmen %}
+                            <div class="input-group mb-2">
+                                <input type="text" name="batsmen[]" class="form-control multi-input"
+                                       value="{{ batsman }}" placeholder="Type batsman name..."
+                                       data-type="batsman" autocomplete="off">
+                                <button type="button" class="btn btn-danger remove-input">-</button>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                        <div class="input-group mb-2">
+                            <input type="text" name="batsmen[]" class="form-control multi-input"
+                                   placeholder="Type batsman last name..." data-type="batsman" autocomplete="off">
+                            <button type="button" class="btn btn-success add-batsman">+</button>
+                        </div>
+                    </div>
+                    <small class="text-muted" id="multi-batsman-status">All batsmen available</small>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-warning btn-lg">📊 Analyze Multiple Matchups</button>
+        </form>
+        <div class="row mt-3">
+            <div class="col-md-12">
+                <label>Toggle columns to sort by:</label>
+                <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Sort toggles">
+                    <button class="btn btn-outline-dark sort-toggle" data-sort="runs">Runs</button>
+                    <button class="btn btn-outline-dark sort-toggle" data-sort="balls">Balls</button>
+                    <button class="btn btn-outline-dark sort-toggle" data-sort="strike_rate">SR</button>
+                    <button class="btn btn-outline-dark sort-toggle" data-sort="wickets">Wickets</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if message %}
+<div class="alert {% if 'cleared' in message or 'swapped' in message %}alert-success{% else %}alert-warning{% endif %}">{{ message }}</div>
+{% endif %}
+
+{% if matchup %}
+<div class="card mt-4">
+    <div class="card-header bg-success text-white">
+        <h5>📊 Single Matchup Found!</h5>
+    </div>
+    <div class="card-body">
+        <b>{{ matchup.bowler }}</b> vs <b>{{ matchup.batsman }}</b> <br>
+        Balls: <b>{{ matchup.balls }}</b> | Runs: <b>{{ matchup.runs }}</b> | Wickets: <b>{{ matchup.wickets }}</b><br>
+        SR: <b>{{ matchup.strike_rate }}</b> | Economy: <b>{{ matchup.economy }}</b> | Dot%: <b>{{ matchup.dot_percentage }}</b>
+    </div>
+</div>
+{% endif %}
+
+{% if multiple_results %}
+<div class="card mt-4">
+    <div class="card-header bg-info text-white">
+        <h5>📊 Multiple Matchups Analysis ({{ multiple_results|length }} combinations)</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="results-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Bowler</th>
+                        <th>Batsman</th>
+                        <th>Balls</th>
+                        <th>Runs</th>
+                        <th>Wickets</th>
+                        <th>SR</th>
+                        <th>Economy</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="results-tbody">
+                    {% for result in multiple_results %}
+                    <tr>
+                        <td><strong>{{ result.bowler }}</strong></td>
+                        <td><strong>{{ result.batsman }}</strong></td>
+                        <td>{{ result.balls or "-" }}</td>
+                        <td>{{ result.runs or "-" }}</td>
+                        <td>{{ result.wickets or "-" }}</td>
+                        <td>{{ result.strike_rate or "-" }}</td>
+                        <td>{{ result.economy or "-" }}</td>
+                        <td>
+                            <span class="badge {% if result.balls %}bg-success{% else %}bg-danger{% endif %}">
+                                {% if result.balls %}Found{% else %}No Match{% endif %}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.suggestions-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none;
+    max-height: 200px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.suggestion-item { 
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: background-color 0.2s; 
+}
+.suggestion-item:hover, .suggestion-item.highlighted { background-color: #e3f2fd; }
+</style>
+
+<script>
+let currentMode = 'dropdown';
+function switchMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.dropdown-mode').forEach(el => el.style.display = (mode === 'dropdown') ? 'block' : 'none');
+    document.querySelectorAll('.keyboard-mode').forEach(el => el.style.display = (mode === 'keyboard') ? 'block' : 'none');
+    document.getElementById('toggle-dropdown').classList.toggle('active', mode === 'dropdown');
+    document.getElementById('toggle-keyboard').classList.toggle('active', mode === 'keyboard');
+}
+document.getElementById('toggle-dropdown').addEventListener('click', () => switchMode('dropdown'));
+document.getElementById('toggle-keyboard').addEventListener('click', () => switchMode('keyboard'));
+
+// Innings filter reloads page
+document.getElementById('innings_filter_global').addEventListener('change', function() {
+    const val = this.value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('innings_filter', val);
+    window.location.href = url.toString();
+});
+
+// --- SMART FILTERING FOR H2H DROPDOWN (Single Player) ---
+let ignoreBowlerChange = false;
+let ignoreBatsmanChange = false;
+function filterMatchupDropdowns() {
+    const bowlerSel = document.getElementById('bowler_select');
+    const batsmanSel = document.getElementById('batsman_select');
+    if (!bowlerSel || !batsmanSel) return;
+
+    bowlerSel.addEventListener('change', function() {
+        if (ignoreBowlerChange) { ignoreBowlerChange = false; return; }
+        const bowler = bowlerSel.value;
+        const innings_filter = document.getElementById('innings_filter_global').value;
+        const league = document.getElementById('league-select').value;
+        fetch(`/api/get_opponents`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                player: bowler,
+                type: 'bowler',
+                innings_filter: parseInt(innings_filter),
+                league: league
+            })
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            const prevBatsman = batsmanSel.value;
+            batsmanSel.innerHTML = '<option value="">-- Choose a Batsman --</option>';
+            (data.opponents || []).forEach(batsman => {
+                batsmanSel.innerHTML += `<option value="${batsman}"${prevBatsman === batsman ? ' selected' : ''}>${batsman}</option>`;
+            });
+            document.getElementById('batsman-status').textContent = `Showing ${data.count} batsmen with matchups`;
+            document.getElementById('batsman-status').className = 'text-success';
+            // Don't trigger re-filtering bowler again if batsmanSel changes below
+            ignoreBatsmanChange = true;
+        });
+    });
+
+    batsmanSel.addEventListener('change', function() {
+        if (ignoreBatsmanChange) { ignoreBatsmanChange = false; return; }
+        const batsman = batsmanSel.value;
+        const innings_filter = document.getElementById('innings_filter_global').value;
+        const league = document.getElementById('league-select').value;
+        fetch(`/api/get_opponents`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                player: batsman,
+                type: 'batsman',
+                innings_filter: parseInt(innings_filter),
+                league: league
+            })
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            const prevBowler = bowlerSel.value;
+            bowlerSel.innerHTML = '<option value="">-- Choose a Bowler --</option>';
+            (data.opponents || []).forEach(bowler => {
+                bowlerSel.innerHTML += `<option value="${bowler}"${prevBowler === bowler ? ' selected' : ''}>${bowler}</option>`;
+            });
+            document.getElementById('bowler-status').textContent = `Showing ${data.count} bowlers with matchups`;
+            document.getElementById('bowler-status').className = 'text-success';
+            // Don't trigger re-filtering batsman again if bowlerSel changes below
+            ignoreBowlerChange = true;
+        });
+    });
+}
+filterMatchupDropdowns();
+
+// ---- AUTOCOMPLETE: SINGLE keyboard mode ----
+function setupAutocomplete(inputId, dropdownId, playerType) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    input.addEventListener('input', function() {
+        const query = input.value.trim();
+        const innings_filter = document.getElementById('innings_filter_global').value;
+        const league = document.getElementById('league-select').value;
+        if (query.length < 1) { dropdown.style.display = 'none'; return; }
+        fetch(`/api/player_fuzzy?q=${encodeURIComponent(query)}&ptype=${playerType}&league=${league}&innings_filter=${innings_filter}`)
+        .then(response => response.json())
+        .then(data => {
+            dropdown.innerHTML = '';
+            (data.players || []).forEach(suggestion => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                item.textContent = suggestion;
+                item.addEventListener('click', () => {
+                    input.value = suggestion;
+                    dropdown.style.display = 'none';
+                });
+                dropdown.appendChild(item);
+            });
+            dropdown.style.display = data.players && data.players.length > 0 ? 'block' : 'none';
+        });
+    });
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.style.display = 'none';
+    });
+}
+setupAutocomplete('bowler_input', 'bowler_suggestions', 'bowler');
+setupAutocomplete('batsman_input', 'batsman_suggestions', 'batsman');
+
+// --- MULTI AUTOCOMPLETE setup (keyboard mode) ---
+function setupMultiAutocomplete(inputElement) {
+    inputElement.addEventListener('input', function() {
+        const query = this.value.trim();
+        const innings_filter = document.getElementById('innings_filter_global').value;
+        const league = document.getElementById('league-select').value;
+        if (query.length < 1) return;
+        fetch(`/api/player_fuzzy?q=${encodeURIComponent(query)}&ptype=${inputElement.dataset.type}&league=${league}&innings_filter=${innings_filter}`)
+        .then(response => response.json())
+        .then(data => {
+            let dropdown = inputElement.parentNode.querySelector('.suggestions-dropdown');
+            if (!dropdown) {
+                dropdown = document.createElement('div');
+                dropdown.className = 'suggestions-dropdown';
+                inputElement.parentNode.appendChild(dropdown);
+            }
+            dropdown.innerHTML = '';
+            (data.players || []).forEach(suggestion => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                item.textContent = suggestion;
+                item.addEventListener('click', () => {
+                    inputElement.value = suggestion;
+                    dropdown.style.display = 'none';
+                });
+                dropdown.appendChild(item);
+            });
+            dropdown.style.display = data.players && data.players.length > 0 ? 'block' : 'none';
+        });
+    });
+    document.addEventListener('click', function(e) {
+        if (!inputElement.contains(e.target)) {
+            let dropdown = inputElement.parentNode.querySelector('.suggestions-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        }
+    });
+}
+
+// -- Multi Add/Remove Input fields (both sides) --
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('add-bowler')) {
+        const container = document.getElementById('bowlers_container');
+        const div = document.createElement('div');
+        div.className = 'input-group mb-2';
+        div.innerHTML = `<input type="text" name="bowlers[]" class="form-control multi-input" placeholder="Type bowler last name..." data-type="bowler" autocomplete="off">
+                         <button type="button" class="btn btn-danger remove-input">-</button>`;
+        container.insertBefore(div, container.lastElementChild);
+        setupMultiAutocomplete(div.querySelector('.multi-input'));
+    }
+    if (e.target.classList.contains('add-batsman')) {
+        const container = document.getElementById('batsmen_container');
+        const div = document.createElement('div');
+        div.className = 'input-group mb-2';
+        div.innerHTML = `<input type="text" name="batsmen[]" class="form-control multi-input" placeholder="Type batsman last name..." data-type="batsman" autocomplete="off">
+                         <button type="button" class="btn btn-danger remove-input">-</button>`;
+        container.insertBefore(div, container.lastElementChild);
+        setupMultiAutocomplete(div.querySelector('.multi-input'));
+    }
+    if (e.target.classList.contains('remove-input')) {
+        e.target.parentNode.remove();
+    }
+});
+
+// Initialize multi autocomplete on page load
+document.querySelectorAll('.multi-input').forEach(setupMultiAutocomplete);
+
+// -- Swap single players (dropdown and keyboard) --
+document.getElementById('swap-single-players').addEventListener('click', function() {
+    if (currentMode === 'dropdown') {
+        const bowlerSelect = document.getElementById('bowler_select');
+        const batsmanSelect = document.getElementById('batsman_select');
+        const temp = bowlerSelect.value;
+        bowlerSelect.value = batsmanSelect.value;
+        batsmanSelect.value = temp;
+    } else {
+        const bowlerInput = document.getElementById('bowler_input');
+        const batsmanInput = document.getElementById('batsman_input');
+        const temp = bowlerInput.value;
+        bowlerInput.value = batsmanInput.value;
+        batsmanInput.value = temp;
+    }
+});
+
+// -- Swap ALL multi players --
+document.getElementById('swap-multi-btn').addEventListener('click', function() {
+    // Get all input values for both
+    let bowlers = Array.from(document.querySelectorAll('#bowlers_container .multi-input')).map(el => el.value);
+    let batsmen = Array.from(document.querySelectorAll('#batsmen_container .multi-input')).map(el => el.value);
+
+    // Clear containers
+    document.getElementById('bowlers_container').innerHTML = '';
+    document.getElementById('batsmen_container').innerHTML = '';
+
+    // Add batsmen as bowlers
+    batsmen.forEach(val => {
+        if (val.trim() !== "") {
+            let div = document.createElement('div');
+            div.className = 'input-group mb-2';
+            div.innerHTML = `<input type="text" name="bowlers[]" class="form-control multi-input" value="${val}" placeholder="Type bowler name..." data-type="bowler" autocomplete="off">
+                             <button type="button" class="btn btn-danger remove-input">-</button>`;
+            document.getElementById('bowlers_container').appendChild(div);
+            setupMultiAutocomplete(div.querySelector('.multi-input'));
+        }
+    });
+    // Always add the empty field
+    let divB = document.createElement('div');
+    divB.className = 'input-group mb-2';
+    divB.innerHTML = `<input type="text" name="bowlers[]" class="form-control multi-input" placeholder="Type bowler last name..." data-type="bowler" autocomplete="off">
+                      <button type="button" class="btn btn-success add-bowler">+</button>`;
+    document.getElementById('bowlers_container').appendChild(divB);
+    setupMultiAutocomplete(divB.querySelector('.multi-input'));
+
+    // Add bowlers as batsmen
+    bowlers.forEach(val => {
+        if (val.trim() !== "") {
+            let div = document.createElement('div');
+            div.className = 'input-group mb-2';
+            div.innerHTML = `<input type="text" name="batsmen[]" class="form-control multi-input" value="${val}" placeholder="Type batsman last name..." data-type="batsman" autocomplete="off">
+                             <button type="button" class="btn btn-danger remove-input">-</button>`;
+            document.getElementById('batsmen_container').appendChild(div);
+            setupMultiAutocomplete(div.querySelector('.multi-input'));
+        }
+    });
+    // Always add the empty field
+    let divBa = document.createElement('div');
+    divBa.className = 'input-group mb-2';
+    divBa.innerHTML = `<input type="text" name="batsmen[]" class="form-control multi-input" placeholder="Type batsman last name..." data-type="batsman" autocomplete="off">
+                       <button type="button" class="btn btn-success add-batsman">+</button>`;
+    document.getElementById('batsmen_container').appendChild(divBa);
+    setupMultiAutocomplete(divBa.querySelector('.multi-input'));
+});
+
+// Sorting toggles (placeholder for future expansion)
+document.querySelectorAll('.sort-toggle').forEach(button => {
+    button.addEventListener('click', function() {
+        const sortKey = this.dataset.sort;
+        // sortResultsTable(sortKey); // Implement if needed
+    });
+});
+
+// On page load, initialize
+document.addEventListener('DOMContentLoaded', function() {
+    switchMode('dropdown');
+    document.querySelectorAll('.multi-input').forEach(setupMultiAutocomplete);
+});
+</script>
+{% endblock %}

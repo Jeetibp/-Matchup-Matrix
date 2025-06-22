@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- League Selector (Top of Page) -->
+{% if leagues %}
+<div class="row mb-3">
+    <div class="col-md-4">
+        <select id="league-select" class="form-select">
+            {% for key, path in leagues.items() %}
+                <option value="{{ key }}" {% if league == key %}selected{% endif %}>
+                    {{ key|upper }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-8 align-self-center">
+        <small class="text-info ms-2">
+            Filter by league. Changing league reloads page with the selected league’s data.
+        </small>
+    </div>
+</div>
+<script>
+document.getElementById('league-select').addEventListener('change', function() {
+    const league = this.value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('league', league);
+    window.location.href = url.toString();
+});
+</script>
+{% endif %}
+
+<h2>Batting Statistics</h2>
+<form class="row g-2 mb-4" method="get">
+    <div class="col-auto">
+        <input type="number" class="form-control" name="min_innings" value="{{ min_innings }}" min="1" placeholder="Min Innings">
+    </div>
+    <div class="col-auto">
+        <select name="innings_filter" class="form-select">
+            <option value="0" {% if innings_filter==0 %}selected{% endif %}>All Innings</option>
+            <option value="1" {% if innings_filter==1 %}selected{% endif %}>1st Innings</option>
+            <option value="2" {% if innings_filter==2 %}selected{% endif %}>2nd Innings</option>
+        </select>
+    </div>
+    <input type="hidden" name="league" value="{{ league }}">
+    <div class="col-auto">
+        <button class="btn btn-primary" type="submit">Apply Filters</button>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Batsman</th>
+                <th>Innings</th>
+                <th>Runs</th>
+                <th>Balls</th>
+                <th>Strike Rate</th>
+                <th>RPI</th>
+                <th>BPB</th>
+                <th>BPD</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stat in stats %}
+            <tr>
+                <td>{{ stat.batsman }}</td>
+                <td>{{ stat.innings }}</td>
+                <td>{{ stat.runs }}</td>
+                <td>{{ stat.balls }}</td>
+                <td>{{ stat.SR }}</td>
+                <td>{{ stat.RPI }}</td>
+                <td>{{ stat.BPB }}</td>
+                <td>{{ stat.BPD }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

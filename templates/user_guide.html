@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container my-5">
+  <div class="card shadow-lg">
+    <div class="card-header bg-primary text-white">
+      <h2 class="mb-0">📖 Cricket Analytics – User Guide & Feature Manual</h2>
+    </div>
+    <div class="card-body">
+
+      <h4>1. Getting Started</h4>
+      <ul>
+        <li><b>Open the app</b> in your browser. Select your preferred league (e.g. T20BLAST, IPL, MCL, THE100, CPL, THE100Women).</li>
+        <li>The dashboard auto-refreshes to show stats for your selected league.</li>
+      </ul>
+      <hr>
+
+      <h4>2. Main Features</h4>
+      <ul>
+        <li><b>Player Database & Quick Search</b>: Instantly search for any batsman or bowler. See their latest stats card in one click.</li>
+        <li><b>Batting/Bowling Statistics</b>: Leaderboards and in-depth tables. Filter by minimum innings and innings type.</li>
+        <li><b>Head-to-Head Analysis</b>: Compare any batsman/bowler or run group matchup analysis.</li>
+      </ul>
+      <hr>
+
+      <h4>3. Player Stats Explained</h4>
+      <b>Batsman Quick Stats:</b>
+      <ul>
+        <li><b>Matches</b>: Total matches played</li>
+        <li><b>Runs</b>: Total runs scored</li>
+        <li><b>Average</b>: Runs per dismissal (Runs / Times Out)</li>
+        <li><b>Strike Rate</b>: (Runs / Balls) × 100</li>
+        <li><b>100s / 50s</b>: Centuries / Fifties scored</li>
+        <li><b>Highest Score</b>: Top runs in a single match</li>
+        <li><b>RPI (All/1st/2nd)</b>: Runs per innings for all, 1st, and 2nd innings</li>
+        <li><b>Dot %</b>: % of balls faced scoring zero</li>
+        <li><b>BPB (Balls Per Boundary)</b>: <span class="text-primary">Balls faced / (Fours + Sixes)</span>. How often a batsman hits a boundary (lower = better).</li>
+        <li><b>BPD (Balls Per Dismissal)</b>: <span class="text-primary">Balls faced / Times out</span>. How long a batsman survives before getting out (higher = better).</li>
+      </ul>
+      <b>Bowler Quick Stats:</b>
+      <ul>
+        <li><b>Matches</b>: Total matches bowled</li>
+        <li><b>Wickets</b>: Total wickets taken</li>
+        <li><b>Avg</b>: Runs conceded per wicket (lower = better)</li>
+        <li><b>Eco</b>: Economy rate (Runs per over, lower = better)</li>
+        <li><b>SR</b>: <span class="text-primary">Balls bowled / Wickets</span>. Average balls per wicket (lower = better)</li>
+        <li><b>Wkts (1st/2nd)</b>: Wickets in 1st and 2nd innings</li>
+        <li><b>Best</b>: Most wickets in a single match</li>
+        <li><b>5W+</b>: Times bowler took 5+ wickets in a match</li>
+        <li><b>Dot %</b>: % of dot balls (no run balls)</li>
+        <li><b>BPB (Balls Per Boundary Conceded)</b>: <span class="text-primary">Balls Bowled / (Fours + Sixes Conceded)</span>. How often a bowler is hit for a boundary (higher = better).</li>
+      </ul>
+      <hr>
+
+      <h4>4. Head-to-Head Matchup Analysis</h4>
+      <p>
+        <b>What is Head-to-Head?</b> Compare any bowler and batsman’s real historical encounters ball-by-ball.<br>
+        <b>How to Use:</b> Select bowler, batsman (or groups), and innings type. See stats like balls faced, runs, wickets, strike rate, economy, dot percentage, matches played, and if the batsman was ever dismissed by this bowler.
+      </p>
+      <ul>
+        <li><b>Balls</b>: Balls faced in this matchup</li>
+        <li><b>Runs</b>: Runs scored off this bowler</li>
+        <li><b>Wickets</b>: Number of dismissals</li>
+        <li><b>Dot Balls</b>: Balls with zero runs</li>
+        <li><b>Strike Rate</b>: Batting SR in the matchup</li>
+        <li><b>Economy</b>: Bowler’s runs per over in matchup</li>
+        <li><b>Dot %</b>: % of dot balls</li>
+        <li><b>Matches</b>: Matches in which this occurred</li>
+        <li><b>Status</b>: “Yes” if batsman dismissed by this bowler, “No” otherwise</li>
+      </ul>
+      <hr>
+
+      <h4>5. Filters, Sorting, and Navigation</h4>
+      <ul>
+        <li><b>Minimum Innings</b>: Show only players with at least this many innings</li>
+        <li><b>Innings Filter</b>: View all, 1st, or 2nd innings stats</li>
+        <li><b>League Selector</b>: Instantly switch between different T20 leagues</li>
+      </ul>
+      <hr>
+
+      <h4>6. Advanced Metric Glossary</h4>
+      <div class="table-responsive">
+      <table class="table table-bordered table-sm">
+        <thead class="table-light"><tr>
+          <th>Metric</th>
+          <th>Formula</th>
+          <th>Meaning</th>
+        </tr></thead>
+        <tbody>
+        <tr><td>BPB</td><td>Balls / (Fours + Sixes)</td><td>Boundary frequency. Lower for frequent hitters/boundary-givers.</td></tr>
+        <tr><td>BPD</td><td>Balls / Times Dismissed</td><td>Batsman’s survival. Higher is better.</td></tr>
+        <tr><td>SR (Bat)</td><td>(Runs / Balls) × 100</td><td>How quickly a batsman scores.</td></tr>
+        <tr><td>SR (Bowl)</td><td>Balls / Wickets</td><td>How quickly a bowler takes wickets. Lower is better.</td></tr>
+        <tr><td>Dot %</td><td>(Dot Balls / Balls) × 100</td><td>Percentage of dot balls (no runs).</td></tr>
+        <tr><td>Economy</td><td>Runs / (Balls / 6)</td><td>Runs conceded per over (bowler).</td></tr>
+        <tr><td>Average</td><td>Runs / Outs (bat); Runs Conceded / Wickets (bowl)</td><td>Bat: typical runs per out. Bowl: typical runs per wicket.</td></tr>
+        <tr><td>RPI</td><td>Runs / Innings</td><td>Runs per innings (consistency metric).</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <hr>
+
+      <h4>7. Tips & Best Practices</h4>
+      <ul>
+        <li>Use BPB to spot power hitters or bowlers who concede many boundaries.</li>
+        <li>Compare “Dot %” to find tight, disciplined bowlers or patient batsmen.</li>
+        <li>“Head-to-Head” uncovers hidden matchups (e.g., a bowler who consistently dismisses a big-name batsman).</li>
+      </ul>
+      <hr>
+
+      <h4>8. FAQ & Troubleshooting</h4>
+      <ul>
+        <li><b>No Data:</b> Try changing filters or check your league selection.</li>
+        <li><b>Player Not Found:</b> Use partial names or alternate spellings.</li>
+        <li><b>Stats Missing:</b> Some advanced stats require enough matches or balls to be meaningful.</li>
+      </ul>
+
+      <h5 class="mt-4">Enjoy discovering the depth of cricket analytics!<br>
+        <small>For support, use the app’s contact/help options.</small>
+      </h5>
+      <hr>
+      <div class="mt-4">
+        <b>App Name:</b> Matchup Matrix<br>
+        <b>Creator:</b> Kumar Jeet<br>
+        <b>Email:</b> <a href="mailto:techboxtb24@gmail.com">techboxtb24@gmail.com</a><br>
+        <b>Source Dataset Provider:</b> <a href="https://cricsheet.org/" target="_blank">cricsheet.org</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

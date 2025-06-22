@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <h2 class="mb-4">🏟️ Enhanced Venue Analysis</h2>
+  
+  <!-- Venue Selection Form -->
+  <form method="get" class="mb-4">
+    <div class="row">
+      <div class="col-md-4">
+        <select name="venue" class="form-select" onchange="this.form.submit()">
+          <option value="">-- Select Venue --</option>
+          {% for v in venues %}
+            <option value="{{ v }}" {% if selected_venue == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <select name="team" class="form-select" {% if not selected_venue %}disabled{% endif %}>
+          <option value="">-- Single Team Analysis --</option>
+          {% for t in teams %}
+            <option value="{{ t }}" {% if selected_team == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <!-- Multi-team compare dropdown removed -->
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" type="submit">Analyze</button>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-secondary w-100" type="button" id="refreshBtn">
+          <i class="fas fa-refresh"></i> Refresh
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {% if venue_characteristics %}
+  <!-- Venue Characteristics -->
+  <div class="card mb-4 shadow-lg">
+    <div class="card-header bg-success text-white">
+      <h5 class="mb-0"><i class="fas fa-chart-line"></i> {{ venue_characteristics.venue }} - Venue Characteristics</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <table class="table table-bordered">
+            <tr><th>Total Matches</th><td><strong>{{ venue_characteristics.total_matches }}</strong></td></tr>
+            <tr><th>Average 1st Innings</th><td>{{ venue_characteristics.avg_1st_innings }}</td></tr>
+            <tr><th>Average 2nd Innings</th><td>{{ venue_characteristics.avg_2nd_innings }}</td></tr>
+            <tr><th>Chase Success Rate</th><td><span class="badge bg-info">{{ venue_characteristics.chase_success_rate }}%</span></td></tr>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <table class="table table-bordered">
+            <tr><th>Boundary Rate</th><td>{{ venue_characteristics.boundary_rate }}% per ball</td></tr>
+            <tr><th>High Scores (150+)</th><td><span class="badge bg-success">{{ venue_characteristics.high_scores }}</span></td></tr>
+            <tr><th>Low Scores (≤120)</th><td><span class="badge bg-danger">{{ venue_characteristics.low_scores }}</span></td></tr>
+            <tr><th>Total Boundaries</th><td>{{ venue_characteristics.total_fours }}×4s, {{ venue_characteristics.total_sixes }}×6s</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if venue_records %}
+  <!-- Venue Records -->
+  <div class="card mb-4 shadow-lg">
+    <div class="card-header bg-warning text-dark">
+      <h5 class="mb-0"><i class="fas fa-trophy"></i> Venue Records</h5>
+    </div>
+    <div class="card-body">
+      <div class="row text-center">
+        <div class="col-md-4">
+          <div class="card bg-light">
+            <div class="card-body">
+              <h6>Highest Individual Score</h6>
+              <h3 class="text-success">{{ venue_records.highest_individual_score }}</h3>
+              <p class="mb-0"><strong>{{ venue_records.highest_scorer }}</strong></p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card bg-light">
+            <div class="card-body">
+              <h6>Best Bowling Figures</h6>
+              <h3 class="text-primary">{{ venue_records.best_bowling_figures }}/X</h3>
+              <p class="mb-0"><strong>{{ venue_records.best_bowler }}</strong></p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card bg-light">
+            <div class="card-body">
+              <h6>Most Sixes (Innings)</h6>
+              <h3 class="text-danger">{{ venue_records.most_sixes_innings }}</h3>
+              <p class="mb-0">Maximum in single innings</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if team_comparison %}
+  <!-- Team Comparison -->
+  <div class="card mb-4 shadow-lg">
+    <div class="card-header bg-info text-white">
+      <h5 class="mb-0"><i class="fas fa-balance-scale"></i> Team Comparison at {{ selected_venue }}</h5>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead class="table-dark">
+            <tr>
+              <th>Team</th>
+              <th>Matches</th>
+              <th>Overall Avg</th>
+              <th>HS</th>
+              <th>Win % 1st</th>
+              <th>Win % 2nd</th>
+              <th>Overall Performance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for team in team_comparison %}
+            <tr>
+              <td><strong>{{ team.team }}</strong></td>
+              <td>{{ team.matches }}</td>
+              <td>{{ team.overall_avg }}</td>
+              <td><span class="badge bg-success">{{ team.HS }}</span></td>
+              <td>{{ team.win_pct_1st }}%</td>
+              <td>{{ team.win_pct_2nd }}%</td>
+              <td>
+                {% set overall_perf = (team.win_pct_1st + team.win_pct_2nd) / 2 %}
+                {% if overall_perf >= 60 %}
+                  <span class="badge bg-success">Excellent</span>
+                {% elif overall_perf >= 40 %}
+                  <span class="badge bg-warning">Average</span>
+                {% else %}
+                  <span class="badge bg-danger">Poor</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if team_stats %}
+  <!-- Single Team Analysis -->
+  <div class="card shadow-lg">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0">
+        <i class="fas fa-chart-bar"></i>
+        {{ team_stats.team }} Performance at {{ team_stats.venue }}
+      </h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <!-- Basic Stats -->
+        <div class="col-md-6">
+          <h6 class="text-primary"><i class="fas fa-info-circle"></i> Basic Statistics</h6>
+          <table class="table table-bordered table-sm">
+            <tbody>
+              <tr>
+                <th class="bg-light">Total Matches</th>
+                <td><strong>{{ team_stats.matches }}</strong></td>
+              </tr>
+              <tr>
+                <th class="bg-light">Overall Average</th>
+                <td><strong>{{ team_stats.overall_avg }}</strong></td>
+              </tr>
+              <tr>
+                <th class="bg-light">Avg 1st Innings</th>
+                <td>{{ team_stats.avg_innings_1 }}</td>
+              </tr>
+              <tr>
+                <th class="bg-light">Avg 2nd Innings</th>
+                <td>{{ team_stats.avg_innings_2 }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Score Records -->
+        <div class="col-md-6">
+          <h6 class="text-success"><i class="fas fa-trophy"></i> Score Records</h6>
+          <table class="table table-bordered table-sm">
+            <tbody>
+              <tr>
+                <th class="bg-light">Highest Score (HS)</th>
+                <td><span class="badge bg-success">{{ team_stats.HS }}</span></td>
+              </tr>
+              <tr>
+                <th class="bg-light">Lowest Score (LS)</th>
+                <td><span class="badge bg-danger">{{ team_stats.LS }}</span></td>
+              </tr>
+              <tr>
+                <th class="bg-light">Highest Chase (HC)</th>
+                <td>
+                  {% if team_stats.HC != 'N/A' %}
+                    <span class="badge bg-info">{{ team_stats.HC }}</span>
+                  {% else %}
+                    <span class="text-muted">N/A</span>
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th class="bg-light">Lowest Defended (LD)</th>
+                <td>
+                  {% if team_stats.LD != 'N/A' %}
+                    <span class="badge bg-warning">{{ team_stats.LD }}</span>
+                  {% else %}
+                    <span class="text-muted">N/A</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Win Statistics -->
+      <div class="row mt-4">
+        <div class="col-md-12">
+          <h6 class="text-warning"><i class="fas fa-medal"></i> Win Statistics</h6>
+          <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+              <tr>
+                <th>Batting Position</th>
+                <th>Wins</th>
+                <th>Win Percentage</th>
+                <th>Performance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Batting 1st</strong></td>
+                <td>{{ team_stats.first_bat_wins }}</td>
+                <td>
+                  <span class="badge {% if team_stats.win_pct_1st >= 50 %}bg-success{% else %}bg-danger{% endif %}">
+                    {{ team_stats.win_pct_1st }}%
+                  </span>
+                </td>
+                <td>
+                  {% if team_stats.win_pct_1st >= 60 %}
+                    <i class="fas fa-arrow-up text-success"></i> Excellent
+                  {% elif team_stats.win_pct_1st >= 40 %}
+                    <i class="fas fa-minus text-warning"></i> Average
+                  {% else %}
+                    <i class="fas fa-arrow-down text-danger"></i> Poor
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Batting 2nd</strong></td>
+                <td>{{ team_stats.second_bat_wins }}</td>
+                <td>
+                  <span class="badge {% if team_stats.win_pct_2nd >= 50 %}bg-success{% else %}bg-danger{% endif %}">
+                    {{ team_stats.win_pct_2nd }}%
+                  </span>
+                </td>
+                <td>
+                  {% if team_stats.win_pct_2nd >= 60 %}
+                    <i class="fas fa-arrow-up text-success"></i> Excellent
+                  {% elif team_stats.win_pct_2nd >= 40 %}
+                    <i class="fas fa-minus text-warning"></i> Average
+                  {% else %}
+                    <i class="fas fa-arrow-down text-danger"></i> Poor
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Chart Visualization -->
+      <div class="row mt-4">
+        <div class="col-md-6">
+          <canvas id="winChart" width="300" height="200"></canvas>
+        </div>
+        <div class="col-md-6">
+          <canvas id="avgChart" width="300" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // Win Chart
+    const winCtx = document.getElementById('winChart').getContext('2d');
+    const winChart = new Chart(winCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Batting 1st', 'Batting 2nd'],
+        datasets: [{
+          label: 'Win %',
+          data: [{{ team_stats.win_pct_1st }}, {{ team_stats.win_pct_2nd }}],
+          backgroundColor: ['#28a745', '#17a2b8'],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Win Percentage by Batting Order'
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: function(value) {
+                return value + '%';
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Average Chart
+    const avgCtx = document.getElementById('avgChart').getContext('2d');
+    const avgChart = new Chart(avgCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['1st Innings Avg', '2nd Innings Avg'],
+        datasets: [{
+          data: [{{ team_stats.avg_innings_1 }}, {{ team_stats.avg_innings_2 }}],
+          backgroundColor: ['#ffc107', '#fd7e14'],
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Average Runs by Innings'
+          }
+        }
+      }
+    });
+  </script>
+  {% endif %}
+
+  {% if error %}
+    <div class="alert alert-danger mt-3">
+      <i class="fas fa-exclamation-triangle"></i>
+      <strong>Error:</strong> {{ error }}
+    </div>
+  {% endif %}
+
+  {% if not venue_characteristics and not error and not selected_venue %}
+    <div class="alert alert-secondary mt-3">
+      <i class="fas fa-arrow-up"></i>
+      <strong>Getting Started:</strong>
+      <ul class="mb-0 mt-2">
+        <li>Select a venue to view comprehensive analysis</li>
+        <li>Choose a single team for detailed performance breakdown</li>
+        <li>View venue characteristics, records, and team-specific insights</li>
+        <li>Use the refresh button to reset all selections</li>
+      </ul>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Refresh Button JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshBtn = document.getElementById('refreshBtn');
+    
+    refreshBtn.addEventListener('click', function() {
+        // Reset all form inputs to default state
+        const venueSelect = document.querySelector('select[name="venue"]');
+        const teamSelect = document.querySelector('select[name="team"]');
+        
+        // Reset venue selection
+        if (venueSelect) {
+            venueSelect.selectedIndex = 0; // Select first option (-- Select Venue --)
+        }
+        
+        // Reset team selection
+        if (teamSelect) {
+            teamSelect.selectedIndex = 0; // Select first option (-- Single Team Analysis --)
+            teamSelect.disabled = true; // Disable team dropdown
+        }
+        
+        // Clear URL parameters and reload page
+        const url = new URL(window.location);
+        url.search = ''; // Clear all query parameters
+        window.location.href = url.toString();
+    });
+});
+</script>
+
+{% endblock %}

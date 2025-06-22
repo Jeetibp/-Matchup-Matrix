@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- League Selector (Top of Page) -->
+{% if leagues %}
+<div class="row mb-3">
+    <div class="col-md-4">
+        <select id="league-select" class="form-select">
+            {% for key, path in leagues.items() %}
+                <option value="{{ key }}" {% if league == key %}selected{% endif %}>
+                    {{ key|upper }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-8 align-self-center">
+        <small class="text-info ms-2">
+            Filter by league. Changing league reloads page with the selected league’s data.
+        </small>
+    </div>
+</div>
+<script>
+document.getElementById('league-select').addEventListener('change', function() {
+    const league = this.value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('league', league);
+    window.location.href = url.toString();
+});
+</script>
+{% endif %}
+
+<!-- Player Database & Quick Search card FIRST! -->
+<div class="card mt-2 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h4 class="mb-0">Player Database & Quick Search</h4>
+    </div>
+    <div class="card-body">
+        <form id="player-search-form" autocomplete="off" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <input type="text" id="player-search-input" class="form-control" placeholder="Type player last name only, e.g. 'Kohli' or 'Dhoni'..." autocomplete="off">
+                <div id="player-suggestions" class="suggestions-dropdown"></div>
+            </div>
+            <div class="col-md-2">
+                <select id="player-type" class="form-select">
+                    <option value="batsman">Batsman</option>
+                    <option value="bowler">Bowler</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-dark btn-block">🔎 Show Stats</button>
+            </div>
+            <div class="col-md-2">
+                <!-- Refresh/Clear button -->
+                <button type="button" class="btn btn-outline-secondary" id="refresh-player-search" title="Clear search & input" style="display:none;">⟳ Clear</button>
+            </div>
+        </form>
+        <div id="player-result-card" class="mt-4"></div>
+    </div>
+</div>
+
+<h1 class="mb-4">
+    {% if league == 't20blast' %}T20 Blast
+    {% elif league == 'ipl' %}IPL
+    {% elif league == 'psl' %}PSL
+    {% elif league == 'the100' %}The Hundred
+    {% elif league == 'cpl' %}CPL
+    {% else %}Cricket
+    {% endif %} Analytics Dashboard
+</h1>
+
+<style>
+.suggestions-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none;
+    max-height: 200px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.suggestion-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: background-color 0.2s;}
+.suggestion-item:hover, .suggestion-item.highlighted { background-color: #e3f2fd;}
+.player-database-card {background: #f8f9fa; border-radius: 1rem; padding: 1.5rem; position:relative;}
+.player-stats-table td, .player-stats-table th {padding: 0.5rem 1.2rem;}
+.btn-close-quickstats {
+    position: absolute; top: 8px; right: 12px; z-index: 10; background: transparent; border: none;
+}
+</style>
+<script>
+const playerInput = document.getElementById('player-search-input');
+const suggestionBox = document.getElementById('player-suggestions');
+const refreshBtn = document.getElementById('refresh-player-search');
+let activeIdx = -1, suggestions = [];
+
+// Fuzzy suggestions (surname, part of name)
+playerInput.addEventListener('input', function() {
+    const q = playerInput.value.trim();
+    const league = document.getElementById('league-select').value;
+    if (!q) { suggestionBox.style.display = 'none'; return; }
+    fetch(`/api/player_fuzzy?q=${encodeURIComponent(q)}&league=${league}`)
+        .then(resp=>resp.json())
+        .then(data=>{
+            suggestions = data.players;
+            if (!suggestions.length) { suggestionBox.style.display='none'; return; }
+            suggestionBox.innerHTML = '';
+            suggestions.forEach((name,idx)=>{
+                const div = document.createElement('div');
+                div.className = 'suggestion-item' + (idx===activeIdx?' highlighted':'');
+                div.textContent = name;
+                div.onclick = ()=>{playerInput.value=name;suggestionBox.style.display='none';};
+                suggestionBox.appendChild(div);
+            });
+            suggestionBox.style.display='block';
+        });
+});
+
+// Keyboard navigation for suggestions
+playerInput.addEventListener('keydown', function(e) {
+    const items = suggestionBox.querySelectorAll('.suggestion-item');
+    if (!items.length) return;
+    if (e.key==='ArrowDown') { activeIdx=Math.min(activeIdx+1,items.length-1); highlight(); e.preventDefault();}
+    else if (e.key==='ArrowUp') { activeIdx=Math.max(activeIdx-1,0); highlight(); e.preventDefault();}
+    else if (e.key==='Enter') { if (activeIdx>=0) { playerInput.value=items[activeIdx].textContent; suggestionBox.style.display='none';} }
+    else if (e.key==='Escape') { suggestionBox.style.display='none';}
+    function highlight() {
+        items.forEach((el,idx)=>el.classList.toggle('highlighted',idx===activeIdx));
+    }
+});
+document.addEventListener('click', e=>{
+    if (!e.target.closest('#player-search-input')) suggestionBox.style.display='none';
+});
+
+// Search form submit (fetch and show player stats)
+document.getElementById('player-search-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const name = playerInput.value.trim();
+    const league = document.getElementById('league-select').value;
+    if (!name) return;
+    const ptype = document.getElementById('player-type').value;
+    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}`)
+      .then(r=>r.json())
+      .then(data=>{
+        let html = '';
+        if (data.error) { html = `<div class='alert alert-danger'>${data.error}</div>`; }
+        else if (ptype==='batsman') {
+            html = `<div class='card player-database-card'>
+            <button class='btn-close btn-close-quickstats' aria-label='Close' onclick="closePlayerStats()" style="position:absolute;top:8px;right:12px;"></button>
+            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-primary ms-2">Batsman</span></h5>
+            <div class='row'>
+            <div class='col-md-6'>
+            <table class='table table-bordered player-stats-table'>
+              <tr><th>Matches</th><td>${data.matches}</td></tr>
+              <tr><th>Runs</th><td>${data.runs}</td></tr>
+              <tr><th>Average</th><td>${data.avg}</td></tr>
+              <tr><th>Strike Rate</th><td>${data.sr}</td></tr>
+              <tr><th>100s / 50s</th><td>${data.hundreds} / ${data.fifties}</td></tr>
+              <tr><th>Highest Score</th><td>${data.hs}</td></tr>
+              <tr><th>RPI (All/1st/2nd)</th><td>${data.rpi_all} / ${data.rpi_1} / ${data.rpi_2}</td></tr>
+            </table>
+            </div>
+            <div class='col-md-6'>
+            <table class='table table-bordered player-stats-table'>
+              <tr><th>Dot %</th><td>${data.dot_pct}%</td></tr>
+              <tr><th>BPD</th><td>${data.bpd && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
+              <tr><th>BPB</th><td>${data.bpb && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
+            </table>
+            </div>
+            </div>
+            </div>`;
+        } else {
+            html = `<div class='card player-database-card'>
+            <button class='btn-close btn-close-quickstats' aria-label='Close' onclick="closePlayerStats()" style="position:absolute;top:8px;right:12px;"></button>
+            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-success ms-2">Bowler</span></h5>
+            <div class='row'>
+            <div class='col-md-6'>
+            <table class='table table-bordered player-stats-table'>
+              <tr><th>Matches</th><td>${data.matches}</td></tr>
+              <tr><th>Wickets</th><td>${data.wickets}</td></tr>
+              <tr><th>Avg</th><td>${data.avg===null?"-":data.avg}</td></tr>
+              <tr><th>Eco</th><td>${data.eco===null?"-":data.eco}</td></tr>
+              <tr><th>SR</th><td>${data.sr===null?"-":data.sr}</td></tr>
+              <tr><th>Wkts (1st/2nd)</th><td>${data.wickets_1} / ${data.wickets_2}</td></tr>
+              <tr><th>Best</th><td>${data.best}</td></tr>
+              <tr><th>5W+</th><td>${data.five_wkts}</td></tr>
+            </table>
+            </div>
+            <div class='col-md-6'>
+            <table class='table table-bordered player-stats-table'>
+              <tr><th>Dot %</th><td>${data.dot_pct}%</td></tr>
+              <tr><th>BPD</th><td>${data.bpd && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
+              <tr><th>BPB</th><td>${data.bpb && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
+            </table>
+            </div>
+            </div>
+            </div>`;
+        }
+        document.getElementById('player-result-card').innerHTML = html;
+        refreshBtn.style.display = "inline-block";
+      });
+});
+
+function closePlayerStats() {
+    document.getElementById('player-result-card').innerHTML = '';
+    document.getElementById('player-search-input').value = '';
+    document.getElementById('player-suggestions').style.display = 'none';
+    refreshBtn.style.display = "none";
+}
+refreshBtn.onclick = closePlayerStats;
+</script>
+{% endblock %}
