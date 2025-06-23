@@ -116,13 +116,13 @@ def home():
             top_bowl_1 = analytics.get_bowling_stats(min_innings=1, innings_filter=1).head(1)
             top_bowl_2 = analytics.get_bowling_stats(min_innings=1, innings_filter=2).head(1)
             
-            # Get simplified counts to reduce memory usage
-            total_players = len(top_bat_all) if not top_bat_all.empty else 0
-            total_bowlers = len(top_bowl_all) if not top_bowl_all.empty else 0
+            # FIXED: Get actual counts instead of DataFrame lengths
+            total_players = analytics.df['batsman'].nunique() if hasattr(analytics, 'df') else 0
+            total_bowlers = analytics.df['bowler'].nunique() if hasattr(analytics, 'df') else 0
             
             # Clear memory after processing
             gc.collect()
-            print("Homepage stats processed successfully")
+            print(f"Homepage stats processed successfully - {total_players} players, {total_bowlers} bowlers")
             
             return render_template(
                 "home.html",
@@ -598,6 +598,37 @@ def health_check():
 @app.route('/test')
 def test():
     return "🎉 Flask app is working! All systems operational."
+
+# Debug endpoint to check data loading
+@app.route('/debug')
+def debug():
+    try:
+        analytics, league, error = get_analytics()
+        if analytics:
+            summary = analytics.get_data_summary()
+            sample_data = analytics.df.head(10).to_dict('records') if hasattr(analytics, 'df') else []
+            columns = list(analytics.df.columns) if hasattr(analytics, 'df') else []
+            return jsonify({
+                'status': 'success',
+                'summary': summary,
+                'columns': columns,
+                'sample_data': sample_data,
+                'league': league,
+                'data_shape': analytics.df.shape if hasattr(analytics, 'df') else [0, 0]
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'error': error,
+                'league': league,
+                'available_leagues': list(available_leagues().keys())
+            })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'available_leagues': list(available_leagues().keys())
+        })
 
 # Status endpoint with memory info
 @app.route('/status')
