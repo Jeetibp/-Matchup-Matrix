@@ -2,14 +2,21 @@ import pandas as pd
 import numpy as np
 import gc
 import os
-import psutil
-from datetime import datetime
 import warnings
+from datetime import datetime
 
-# Suppress the specific FutureWarning and optimize pandas settings
+# Suppress ALL pandas warnings for production
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
+warnings.filterwarnings('ignore', category=DeprecationWarning)
 pd.set_option('future.no_silent_downcasting', True)
 pd.set_option('mode.chained_assignment', None)
+
+# Try to import psutil, make it optional
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 class CricketAnalytics:
     def __init__(self, csv_file):
@@ -25,38 +32,66 @@ class CricketAnalytics:
             self.df = self._load_csv_fallback(csv_file)
             self.prepare_data()
             self.optimize_memory()
+        except Exception as e:
+            print(f"Error loading cricket data: {e}")
+            # Create minimal fallback dataset to prevent crashes
+            self.df = pd.DataFrame({
+                'batsman': ['Sample Player'],
+                'bowler': ['Sample Bowler'],
+                'runs_of_bat': [0],
+                'innings': [1],
+                'match_id': ['sample_match'],
+                'venue': ['Sample Venue'],
+                'batting_team': ['Sample Team'],
+                'player_dismissed': [None],
+                'dismissal_kind': [None],
+                'wides': [0],
+                'noballs': [0],
+                'extras': [0]
+            })
+            self.prepare_data()
 
     def _load_csv_optimized(self, csv_file):
         """Load CSV with memory optimization"""
-        # Define optimal data types to reduce memory usage
-        dtype_dict = {
-            'innings': 'int8',
-            'runs_of_bat': 'int8',
-            'runs_off_bat': 'int8',
-            'wides': 'int8',
-            'noballs': 'int8',
-            'extras': 'int8'
-        }
-        
         try:
-            # Try to load with optimized dtypes
-            df = pd.read_csv(csv_file, dtype=dtype_dict, low_memory=True)
-        except (ValueError, KeyError):
-            # Fallback to normal loading if column names don't match
-            df = pd.read_csv(csv_file, low_memory=True)
-        
-        # Force garbage collection after loading
-        gc.collect()
-        return df
+            # Check if running on Render and limit data for memory conservation
+            max_rows = 8000 if os.environ.get('RENDER') else None
+            
+            # Define optimal data types to reduce memory usage
+            dtype_dict = {
+                'innings': 'int8',
+                'runs_of_bat': 'int8',
+                'runs_off_bat': 'int8',
+                'wides': 'int8',
+                'noballs': 'int8',
+                'extras': 'int8'
+            }
+            
+            try:
+                # Try to load with optimized dtypes
+                df = pd.read_csv(csv_file, dtype=dtype_dict, low_memory=True, nrows=max_rows)
+            except (ValueError, KeyError):
+                # Fallback to normal loading if column names don't match
+                df = pd.read_csv(csv_file, low_memory=True, nrows=max_rows)
+            
+            # Force garbage collection after loading
+            gc.collect()
+            return df
+            
+        except Exception as e:
+            print(f"CSV loading error: {e}")
+            raise
 
     def _load_csv_fallback(self, csv_file):
         """Fallback loader for memory-constrained environments"""
-        # Load only a subset of data if memory is limited
-        max_rows = 10000 if os.environ.get('RENDER') else None
+        # Load only a very small subset of data if memory is severely limited
+        max_rows = 3000 if os.environ.get('RENDER') else 5000
         return pd.read_csv(csv_file, nrows=max_rows, low_memory=True)
 
     def _monitor_memory(self, stage=""):
         """Monitor memory usage for debugging"""
+        if not PSUTIL_AVAILABLE:
+            return
         try:
             memory = psutil.virtual_memory()
             if memory.percent > 85:  # If memory usage > 85%
@@ -125,9 +160,9 @@ class CricketAnalytics:
             if innings_filter in [1,2]:
                 df = df[df['innings'] == innings_filter]
             
-            # Process in smaller chunks to reduce memory pressure
-            match_runs = df.groupby(['batsman', 'match_id'])['runs_of_bat'].sum().reset_index()
-            batsman_match_scores = match_runs.groupby('batsman')['runs_of_bat'].agg(list)
+            # CRITICAL FIX: Add observed=True to suppress FutureWarnings
+            match_runs = df.groupby(['batsman', 'match_id'], observed=True)['runs_of_bat'].sum().reset_index()
+            batsman_match_scores = match_runs.groupby('batsman', observed=True)['runs_of_bat'].agg(list)
             
             # Memory cleanup between operations
             del match_runs
@@ -137,24 +172,24 @@ class CricketAnalytics:
             fifties = batsman_match_scores.apply(lambda scores: sum(1 for s in scores if 50 <= s < 100))
             highest_score = batsman_match_scores.apply(lambda scores: max(scores) if scores else 0)
             
-            # Main stats with memory optimization
-            runs = df.groupby('batsman')['runs_of_bat'].sum()
-            balls = df.groupby('batsman').size()
-            inns = df.groupby('batsman')['match_id'].nunique()
-            fours = df.groupby('batsman')['isFour'].sum()
-            sixes = df.groupby('batsman')['isSix'].sum()
-            dot_pct = df.groupby('batsman')['isDot'].sum() / balls * 100
+            # Main stats with observed=True to eliminate warnings
+            runs = df.groupby('batsman', observed=True)['runs_of_bat'].sum()
+            balls = df.groupby('batsman', observed=True).size()
+            inns = df.groupby('batsman', observed=True)['match_id'].nunique()
+            fours = df.groupby('batsman', observed=True)['isFour'].sum()
+            sixes = df.groupby('batsman', observed=True)['isSix'].sum()
+            dot_pct = df.groupby('batsman', observed=True)['isDot'].sum() / balls * 100
             boundary_pct = (fours + sixes) / balls * 100
             
-            # Dismissals, BPD, BPB
-            dismissals = df[df['player_dismissed'] == df['batsman']].groupby('batsman')['player_dismissed'].count()
+            # Dismissals, BPD, BPB with observed=True
+            dismissals = df[df['player_dismissed'] == df['batsman']].groupby('batsman', observed=True)['player_dismissed'].count()
             bpd = balls / dismissals.replace(0, pd.NA)
             bpb = balls / (fours + sixes).replace(0, pd.NA)
             
-            # RPI calculations
+            # RPI calculations with observed=True
             rpi_all = runs / inns
-            rpi_1 = df[df['innings']==1].groupby('batsman')['runs_of_bat'].sum() / df[df['innings']==1].groupby('batsman')['match_id'].nunique()
-            rpi_2 = df[df['innings']==2].groupby('batsman')['runs_of_bat'].sum() / df[df['innings']==2].groupby('batsman')['match_id'].nunique()
+            rpi_1 = df[df['innings']==1].groupby('batsman', observed=True)['runs_of_bat'].sum() / df[df['innings']==1].groupby('batsman', observed=True)['match_id'].nunique()
+            rpi_2 = df[df['innings']==2].groupby('batsman', observed=True)['runs_of_bat'].sum() / df[df['innings']==2].groupby('batsman', observed=True)['match_id'].nunique()
             
             stats = pd.DataFrame({
                 'batsman': runs.index,
@@ -184,8 +219,10 @@ class CricketAnalytics:
             return stats
             
         except MemoryError:
-            # Fallback for memory issues
             print("Memory limit reached in batting stats, returning limited data")
+            return pd.DataFrame(columns=['batsman', 'runs', 'innings', 'balls', 'SR'])
+        except Exception as e:
+            print(f"Error in batting stats: {e}")
             return pd.DataFrame(columns=['batsman', 'runs', 'innings', 'balls', 'SR'])
 
     def get_bowling_stats(self, min_innings=3, innings_filter=None):
@@ -195,25 +232,25 @@ class CricketAnalytics:
             if innings_filter in [1,2]:
                 df = df[df['innings'] == innings_filter]
                 
-            # Best and 5W+ with memory optimization
-            match_wkts = df.groupby(['bowler', 'match_id'])['isBowlerWk'].sum().reset_index()
-            best = match_wkts.groupby('bowler')['isBowlerWk'].max()
-            five_wkts = match_wkts.groupby('bowler')['isBowlerWk'].apply(lambda x: sum(x >= 5))
+            # CRITICAL FIX: Add observed=True to suppress FutureWarnings
+            match_wkts = df.groupby(['bowler', 'match_id'], observed=True)['isBowlerWk'].sum().reset_index()
+            best = match_wkts.groupby('bowler', observed=True)['isBowlerWk'].max()
+            five_wkts = match_wkts.groupby('bowler', observed=True)['isBowlerWk'].apply(lambda x: sum(x >= 5))
             
             # Memory cleanup
             del match_wkts
             gc.collect()
             
-            # Wickets split by innings
-            wickets_1 = df[df['innings']==1].groupby('bowler')['isBowlerWk'].sum()
-            wickets_2 = df[df['innings']==2].groupby('bowler')['isBowlerWk'].sum()
+            # Wickets split by innings with observed=True
+            wickets_1 = df[df['innings']==1].groupby('bowler', observed=True)['isBowlerWk'].sum()
+            wickets_2 = df[df['innings']==2].groupby('bowler', observed=True)['isBowlerWk'].sum()
             
-            # Main stats
-            runs = df.groupby('bowler')['total_run'].sum()
-            balls = df.groupby('bowler').size()
-            inns = df.groupby('bowler')['match_id'].nunique()
-            wickets = df.groupby('bowler')['isBowlerWk'].sum()
-            dots = df.groupby('bowler')['isDot'].sum()
+            # Main stats with observed=True
+            runs = df.groupby('bowler', observed=True)['total_run'].sum()
+            balls = df.groupby('bowler', observed=True).size()
+            inns = df.groupby('bowler', observed=True)['match_id'].nunique()
+            wickets = df.groupby('bowler', observed=True)['isBowlerWk'].sum()
+            dots = df.groupby('bowler', observed=True)['isDot'].sum()
             eco = runs / (balls / 6)
             dot_pct = dots / balls * 100
             avg = (runs / wickets).replace([float('inf'), float('nan')], 0)
@@ -247,6 +284,9 @@ class CricketAnalytics:
         except MemoryError:
             print("Memory limit reached in bowling stats, returning limited data")
             return pd.DataFrame(columns=['bowler', 'innings', 'balls', 'runs', 'wickets', 'ECO'])
+        except Exception as e:
+            print(f"Error in bowling stats: {e}")
+            return pd.DataFrame(columns=['bowler', 'innings', 'balls', 'runs', 'wickets', 'ECO'])
 
     def get_head_to_head(self, bowler, batsman, innings_filter=None):
         try:
@@ -277,11 +317,13 @@ class CricketAnalytics:
             }
         except MemoryError:
             return None
+        except Exception:
+            return None
 
     def get_multiple_head_to_head(self, bowlers, batsmen, innings_filter=None):
         results = []
         # Process in smaller batches to avoid memory issues
-        batch_size = 10
+        batch_size = 5  # Reduced batch size for better memory management
         
         for i in range(0, len(bowlers), batch_size):
             bowler_batch = bowlers[i:i+batch_size]
@@ -312,49 +354,58 @@ class CricketAnalytics:
         return results
 
     def get_player_opponents(self, player, ptype='bowler', innings_filter=None):
-        df = self.df
-        if innings_filter in [1,2]:
-            df = df[df['innings'] == innings_filter]
-        if ptype=='bowler':
-            opps = df[df['bowler']==player]['batsman'].dropna().unique()
-        else:
-            opps = df[df['batsman']==player]['bowler'].dropna().unique()
-        
-        # Memory cleanup
-        del df
-        gc.collect()
-        
-        return sorted(opps.tolist())
+        try:
+            df = self.df
+            if innings_filter in [1,2]:
+                df = df[df['innings'] == innings_filter]
+            if ptype=='bowler':
+                opps = df[df['bowler']==player]['batsman'].dropna().unique()
+            else:
+                opps = df[df['batsman']==player]['bowler'].dropna().unique()
+            
+            # Memory cleanup
+            del df
+            gc.collect()
+            
+            return sorted(opps.tolist())
+        except Exception:
+            return []
 
     def search_players(self, query, ptype='both', limit=10, innings_filter=None):
-        df = self.df
-        if innings_filter in [1,2]:
-            df = df[df['innings'] == innings_filter]
-        q = query.lower()
-        out = []
-        if ptype in ['bowler','both']:
-            bs = df['bowler'].dropna().unique()
-            mb = [b for b in bs if q in b.lower()]
-            out.extend([{'name':b,'type':'bowler','match_type':'exact' if b.lower().startswith(q) else 'contains'} for b in sorted(mb)[:limit]])
-        if ptype in ['batsman','both']:
-            bs = df['batsman'].dropna().unique()
-            mb = [b for b in bs if q in b.lower()]
-            out.extend([{'name':b,'type':'batsman','match_type':'exact' if b.lower().startswith(q) else 'contains'} for b in sorted(mb)[:limit]])
-        
-        # Memory cleanup
-        del df
-        gc.collect()
-        
-        return out[:limit]
+        try:
+            df = self.df
+            if innings_filter in [1,2]:
+                df = df[df['innings'] == innings_filter]
+            q = query.lower()
+            out = []
+            if ptype in ['bowler','both']:
+                bs = df['bowler'].dropna().unique()
+                mb = [b for b in bs if q in b.lower()]
+                out.extend([{'name':b,'type':'bowler','match_type':'exact' if b.lower().startswith(q) else 'contains'} for b in sorted(mb)[:limit]])
+            if ptype in ['batsman','both']:
+                bs = df['batsman'].dropna().unique()
+                mb = [b for b in bs if q in b.lower()]
+                out.extend([{'name':b,'type':'batsman','match_type':'exact' if b.lower().startswith(q) else 'contains'} for b in sorted(mb)[:limit]])
+            
+            # Memory cleanup
+            del df
+            gc.collect()
+            
+            return out[:limit]
+        except Exception:
+            return []
 
     def get_venue_team_options(self):
-        venues = sorted(self.df['venue'].dropna().unique().tolist())
-        teams = sorted(self.df['batting_team'].dropna().unique().tolist())
-        
-        # Memory cleanup
-        gc.collect()
-        
-        return venues, teams
+        try:
+            venues = sorted(self.df['venue'].dropna().unique().tolist())
+            teams = sorted(self.df['batting_team'].dropna().unique().tolist())
+            
+            # Memory cleanup
+            gc.collect()
+            
+            return venues, teams
+        except Exception:
+            return [], []
 
     def get_venue_team_performance(self, venue_name, team_name):
         try:
@@ -387,9 +438,9 @@ class CricketAnalytics:
             # Count the number of matches the team played at the venue
             team_match_count = team_matches_venue['match_id'].nunique()
             
-            # Compute total runs per innings for the team
+            # Compute total runs per innings for the team with observed=True
             team_innings_stats = (
-                team_matches_venue.groupby(['match_id', 'innings'])['total_runs']
+                team_matches_venue.groupby(['match_id', 'innings'], observed=True)['total_runs']
                 .sum()
                 .unstack(fill_value=0)
             )
@@ -423,8 +474,8 @@ class CricketAnalytics:
             for match_id in team_matches_venue['match_id'].unique():
                 match_data = venue_matches[venue_matches['match_id'] == match_id]
                 
-                # Get innings totals for this match
-                innings_totals = match_data.groupby(['innings', 'batting_team'])['total_runs'].sum().reset_index()
+                # Get innings totals for this match with observed=True
+                innings_totals = match_data.groupby(['innings', 'batting_team'], observed=True)['total_runs'].sum().reset_index()
                 
                 if len(innings_totals) >= 2:
                     inn1_data = innings_totals[innings_totals['innings'] == 1]
@@ -529,6 +580,14 @@ class CricketAnalytics:
                 'matches': 0,
                 'error': 'Memory limit reached'
             }
+        except Exception as e:
+            print(f"Error in venue team performance: {e}")
+            return {
+                'venue': venue_name,
+                'team': team_name,
+                'matches': 0,
+                'error': str(e)
+            }
 
     def get_venue_characteristics(self, venue_name):
         try:
@@ -537,8 +596,8 @@ class CricketAnalytics:
             if venue_matches.empty:
                 return None
                 
-            # Calculate innings totals for each match
-            match_innings_stats = venue_matches.groupby(['match_id', 'innings'])['total_runs'].sum().unstack(fill_value=0)
+            # Calculate innings totals for each match with observed=True
+            match_innings_stats = venue_matches.groupby(['match_id', 'innings'], observed=True)['total_runs'].sum().unstack(fill_value=0)
             
             # Venue characteristics
             total_matches = len(match_innings_stats)
@@ -580,6 +639,9 @@ class CricketAnalytics:
             
         except MemoryError:
             return None
+        except Exception as e:
+            print(f"Error in venue characteristics: {e}")
+            return None
 
     def get_venue_team_comparison(self, venue_name, teams_list):
         if len(teams_list) < 2:
@@ -603,18 +665,18 @@ class CricketAnalytics:
             if venue_matches.empty:
                 return None
                 
-            # Highest individual score by batsman
-            batsman_scores = venue_matches.groupby(['batsman', 'match_id'])['runs_of_bat'].sum()
+            # Highest individual score by batsman with observed=True
+            batsman_scores = venue_matches.groupby(['batsman', 'match_id'], observed=True)['runs_of_bat'].sum()
             highest_individual = batsman_scores.max()
             highest_scorer = batsman_scores.idxmax()[0] if not batsman_scores.empty else "N/A"
             
-            # Best bowling figures
-            bowler_wickets = venue_matches.groupby(['bowler', 'match_id'])['isBowlerWk'].sum()
+            # Best bowling figures with observed=True
+            bowler_wickets = venue_matches.groupby(['bowler', 'match_id'], observed=True)['isBowlerWk'].sum()
             best_bowling = bowler_wickets.max()
             best_bowler = bowler_wickets.idxmax()[0] if not bowler_wickets.empty else "N/A"
             
-            # Most sixes in innings
-            sixes_per_match = venue_matches.groupby(['batting_team', 'match_id', 'innings'])['isSix'].sum()
+            # Most sixes in innings with observed=True
+            sixes_per_match = venue_matches.groupby(['batting_team', 'match_id', 'innings'], observed=True)['isSix'].sum()
             most_sixes = sixes_per_match.max()
             
             result = {
@@ -633,4 +695,7 @@ class CricketAnalytics:
             return result
             
         except MemoryError:
+            return None
+        except Exception as e:
+            print(f"Error in venue records: {e}")
             return None
