@@ -396,6 +396,27 @@ def user_guide():
     return render_template("user_guide.html")
     
 if __name__ == "__main__":
-    print("🟢 app.py loaded!")
-    print("🏏 Flask server starting at http://localhost:5000/")
-    app.run(port=5000, debug=True)
+    import os
+    
+    # Get environment variables
+    APP_ENV = os.environ.get('APP_ENV', 'production')
+    PORT = int(os.environ.get('PORT', 5000))
+    
+    # Production configuration
+    if APP_ENV == 'production':
+        print("🚀 Starting Flask app in PRODUCTION mode")
+        app.run(
+            host='0.0.0.0',          # Accept connections from any IP
+            port=PORT,               # Use Render's assigned port
+            debug=False,             # Disable debug mode
+            threaded=True           # Enable threading for better performance
+        )
+    else:
+        # Development configuration  
+        print("🟢 app.py loaded!")
+        print("🏏 Flask server starting at http://localhost:5000/")
+        app.run(
+            host='localhost',
+            port=5000,
+            debug=True
+        )
