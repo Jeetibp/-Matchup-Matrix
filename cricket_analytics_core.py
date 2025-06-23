@@ -1,7 +1,13 @@
 import pandas as pd
 import numpy as np
 import gc
+
 from datetime import datetime
+import warnings
+
+# Suppress the specific FutureWarning
+warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
+pd.set_option('future.no_silent_downcasting', True)
 
 class CricketAnalytics:
     def __init__(self, csv_file):
