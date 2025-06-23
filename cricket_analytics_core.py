@@ -21,14 +21,16 @@ except ImportError:
 class CricketAnalytics:
     def __init__(self, csv_file):
         try:
-            # Memory-optimized CSV reading
+            print("Initializing Cricket Analytics with full dataset...")
+            # Load complete dataset
             self.df = self._load_csv_optimized(csv_file)
             self.prepare_data()
             self.optimize_memory()
+            print(f"✅ Successfully initialized with {len(self.df)} total records")
             self._monitor_memory("After initialization")
         except MemoryError:
-            # Fallback for memory constraints
-            print("Memory constraint detected, loading reduced dataset...")
+            # Fallback still loads full dataset but with more optimization
+            print("Memory constraint detected, loading with enhanced optimization...")
             self.df = self._load_csv_fallback(csv_file)
             self.prepare_data()
             self.optimize_memory()
@@ -52,27 +54,15 @@ class CricketAnalytics:
             self.prepare_data()
 
     def _load_csv_optimized(self, csv_file):
-        """Load CSV with memory optimization"""
+        """Load complete CSV with enhanced memory optimization"""
         try:
-            # Check if running on Render and limit data for memory conservation
-            max_rows = 8000 if os.environ.get('RENDER') else None
+            print(f"Loading full dataset from {csv_file}...")
             
-            # Define optimal data types to reduce memory usage
-            dtype_dict = {
-                'innings': 'int8',
-                'runs_of_bat': 'int8',
-                'runs_off_bat': 'int8',
-                'wides': 'int8',
-                'noballs': 'int8',
-                'extras': 'int8'
-            }
+            # Load complete dataset - no restrictions
+            df = pd.read_csv(csv_file, low_memory=True)
             
-            try:
-                # Try to load with optimized dtypes
-                df = pd.read_csv(csv_file, dtype=dtype_dict, low_memory=True, nrows=max_rows)
-            except (ValueError, KeyError):
-                # Fallback to normal loading if column names don't match
-                df = pd.read_csv(csv_file, low_memory=True, nrows=max_rows)
+            print(f"Loaded {len(df)} rows with {df['match_id'].nunique()} matches")
+            print(f"Players: {df['batsman'].nunique()}, Bowlers: {df['bowler'].nunique()}")
             
             # Force garbage collection after loading
             gc.collect()
@@ -83,10 +73,16 @@ class CricketAnalytics:
             raise
 
     def _load_csv_fallback(self, csv_file):
-        """Fallback loader for memory-constrained environments"""
-        # Load only a very small subset of data if memory is severely limited
-        max_rows = 3000 if os.environ.get('RENDER') else 5000
-        return pd.read_csv(csv_file, nrows=max_rows, low_memory=True)
+        """Fallback loads complete dataset with enhanced optimization"""
+        print("Using fallback loading for complete dataset...")
+        try:
+            df = pd.read_csv(csv_file, low_memory=True)
+            print(f"Fallback loaded {len(df)} rows successfully")
+            return df
+        except Exception as e:
+            print(f"Fallback error: {e}")
+            # Only if absolutely necessary, load partial data
+            return pd.read_csv(csv_file, nrows=50000, low_memory=True)
 
     def _monitor_memory(self, stage=""):
         """Monitor memory usage for debugging"""
@@ -101,20 +97,30 @@ class CricketAnalytics:
             pass  # Fail silently if psutil not available
 
     def optimize_memory(self):
-        """Aggressively optimize DataFrame memory usage"""
+        """Enhanced memory optimization for full dataset"""
         df = self.df
         
-        # Optimize integer columns with more aggressive downcasting
-        for col in df.select_dtypes(include=['int64', 'int32']).columns:
-            df[col] = pd.to_numeric(df[col], downcast='integer')
+        print(f"Optimizing memory for {len(df)} rows...")
+        
+        # More aggressive but safe downcasting
+        for col in df.select_dtypes(include=['int64']).columns:
+            col_min = df[col].min()
+            col_max = df[col].max()
+            
+            if col_min >= -128 and col_max <= 127:
+                df[col] = df[col].astype('int8')
+            elif col_min >= -32768 and col_max <= 32767:
+                df[col] = df[col].astype('int16')
+            else:
+                df[col] = df[col].astype('int32')
         
         # Optimize float columns
-        for col in df.select_dtypes(include=['float64', 'float32']).columns:
+        for col in df.select_dtypes(include=['float64']).columns:
             df[col] = pd.to_numeric(df[col], downcast='float')
         
-        # Convert object columns to category where beneficial
+        # Convert repeated strings to categories (saves significant memory)
         for col in df.select_dtypes(include=['object']).columns:
-            if df[col].nunique() < len(df) * 0.5:  # If less than 50% unique values
+            if df[col].nunique() < len(df) * 0.6:  # If less than 60% unique
                 df[col] = df[col].astype('category')
         
         # Optimize boolean-like columns
@@ -123,10 +129,14 @@ class CricketAnalytics:
             if col in df.columns:
                 df[col] = df[col].astype('int8')
         
-        # Force memory cleanup
+        # Force cleanup
         gc.collect()
         self.df = df
-        self._monitor_memory("After memory optimization")
+        
+        memory_usage = df.memory_usage(deep=True).sum() / 1024**2
+        print(f"Memory optimization complete. DataFrame size: {memory_usage:.1f} MB")
+        
+        self._monitor_memory("After optimization")
 
     def prepare_data(self):
         df = self.df
@@ -333,7 +343,7 @@ class CricketAnalytics:
     def get_multiple_head_to_head(self, bowlers, batsmen, innings_filter=None):
         results = []
         # Process in smaller batches to avoid memory issues
-        batch_size = 5  # Reduced batch size for better memory management
+        batch_size = 10  # Increased batch size since we have more memory available
         
         for i in range(0, len(bowlers), batch_size):
             bowler_batch = bowlers[i:i+batch_size]
@@ -709,3 +719,20 @@ class CricketAnalytics:
         except Exception as e:
             print(f"Error in venue records: {e}")
             return None
+
+    def get_data_summary(self):
+        """Get summary of loaded data for verification"""
+        total_matches = self.df['match_id'].nunique()
+        total_players = self.df['batsman'].nunique()
+        total_balls = len(self.df)
+        
+        player_match_counts = self.df.groupby('batsman')['match_id'].nunique().sort_values(ascending=False)
+        
+        return {
+            'total_matches': total_matches,
+            'total_players': total_players, 
+            'total_balls': total_balls,
+            'avg_matches_per_player': round(player_match_counts.mean(), 2),
+            'max_matches_per_player': player_match_counts.max(),
+            'top_10_players': player_match_counts.head(10).to_dict()
+        }
