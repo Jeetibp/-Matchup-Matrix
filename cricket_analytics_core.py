@@ -1,12 +1,29 @@
-
 import pandas as pd
 import numpy as np
+import gc
 from datetime import datetime
 
 class CricketAnalytics:
     def __init__(self, csv_file):
         self.df = pd.read_csv(csv_file)
         self.prepare_data()
+        self.optimize_memory()
+
+    def optimize_memory(self):
+        """Optimize DataFrame memory usage"""
+        df = self.df
+        
+        # Optimize integer columns
+        for col in df.select_dtypes(include=['int64']).columns:
+            df[col] = pd.to_numeric(df[col], downcast='integer')
+        
+        # Optimize float columns
+        for col in df.select_dtypes(include=['float64']).columns:
+            df[col] = pd.to_numeric(df[col], downcast='float')
+        
+        # Clear memory
+        gc.collect()
+        self.df = df
 
     def prepare_data(self):
         df = self.df
@@ -71,9 +88,11 @@ class CricketAnalytics:
             'Dot%': dot_pct.round(2).fillna(0),
             'Boundary%': boundary_pct.round(2).fillna(0),
             'BPD': bpd.round(2).fillna(0),
-            'BPB': bpb.round(2).fillna(0).astype(int),
+            'BPB': bpb.round(2).fillna(0).infer_objects(copy=False).astype(int),
         })
         stats = stats[stats['innings']>=min_innings].fillna(0).sort_values('runs',ascending=False).reset_index(drop=True)
+        # Clear memory after processing
+        gc.collect()
         return stats
 
     def get_bowling_stats(self, min_innings=3, innings_filter=None):
@@ -114,6 +133,8 @@ class CricketAnalytics:
             'five_wkts': five_wkts.reindex(runs.index, fill_value=0).astype(int),
         })
         stats = stats[stats['innings']>=min_innings].sort_values('wickets',ascending=False).reset_index(drop=True)
+        # Clear memory after processing
+        gc.collect()
         return stats
 
     def get_head_to_head(self, bowler, batsman, innings_filter=None):
@@ -349,6 +370,8 @@ class CricketAnalytics:
             'win_pct_2nd': round(team_2nd_bat_win_percentage, 2)
         }
         
+        # Clear memory after processing
+        gc.collect()
         return result
 
     def get_venue_characteristics(self, venue_name):
@@ -382,7 +405,7 @@ class CricketAnalytics:
         high_scores = (match_innings_stats >= 150).sum().sum()
         low_scores = (match_innings_stats <= 120).sum().sum()
         
-        return {
+        result = {
             'venue': venue_name,
             'total_matches': total_matches,
             'avg_1st_innings': round(avg_1st_innings, 2),
@@ -394,6 +417,10 @@ class CricketAnalytics:
             'total_fours': int(total_fours),
             'total_sixes': int(total_sixes)
         }
+        
+        # Clear memory after processing
+        gc.collect()
+        return result
 
     def get_venue_team_comparison(self, venue_name, teams_list):
         '''
@@ -433,7 +460,7 @@ class CricketAnalytics:
         sixes_per_match = venue_matches.groupby(['batting_team', 'match_id', 'innings'])['isSix'].sum()
         most_sixes = sixes_per_match.max()
         
-        return {
+        result = {
             'venue': venue_name,
             'highest_individual_score': int(highest_individual) if highest_individual else 0,
             'highest_scorer': highest_scorer,
@@ -441,3 +468,7 @@ class CricketAnalytics:
             'best_bowler': best_bowler,
             'most_sixes_innings': int(most_sixes) if most_sixes else 0
         }
+        
+        # Clear memory after processing
+        gc.collect()
+        return result
