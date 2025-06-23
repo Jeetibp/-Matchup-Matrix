@@ -337,9 +337,12 @@ class CricketAnalytics:
                 dismissed_df = df[df['player_dismissed'] == df['batsman']]
                 dismissals = dismissed_df.groupby('batsman').size()
                 
-                # BPD and BPB calculations
-                bpd = balls / dismissals.reindex(balls.index, fill_value=1)  # Avoid division by zero
-                bpb = balls / (fours + sixes).replace(0, 1)  # Avoid division by zero
+                # FIXED: BPD and BPB calculations with proper numeric conversion
+                bpd_raw = balls / dismissals.reindex(balls.index, fill_value=1)  # Avoid division by zero
+                bpd = pd.to_numeric(bpd_raw, errors='coerce').fillna(0)
+                
+                bpb_raw = balls / (fours + sixes).replace(0, 1)  # Avoid division by zero
+                bpb = pd.to_numeric(bpb_raw, errors='coerce').fillna(0)
                 
                 # RPI calculations by innings
                 try:
@@ -347,20 +350,23 @@ class CricketAnalytics:
                         'runs_of_bat': 'sum',
                         'match_id': 'nunique'
                     })
-                    rpi_1 = rpi_1_data['runs_of_bat'] / rpi_1_data['match_id']
+                    rpi_1_raw = rpi_1_data['runs_of_bat'] / rpi_1_data['match_id']
+                    rpi_1 = pd.to_numeric(rpi_1_raw, errors='coerce').fillna(0)
                     
                     rpi_2_data = df[df['innings']==2].groupby('batsman').agg({
                         'runs_of_bat': 'sum', 
                         'match_id': 'nunique'
                     })
-                    rpi_2 = rpi_2_data['runs_of_bat'] / rpi_2_data['match_id']
+                    rpi_2_raw = rpi_2_data['runs_of_bat'] / rpi_2_data['match_id']
+                    rpi_2 = pd.to_numeric(rpi_2_raw, errors='coerce').fillna(0)
                     
-                    rpi_all = runs / inns
+                    rpi_all_raw = runs / inns
+                    rpi_all = pd.to_numeric(rpi_all_raw, errors='coerce').fillna(0)
                 except Exception as e:
-                    print(f⚠️ RPI calculation error: {e}")
+                    print(f"⚠️ RPI calculation error: {e}")
                     rpi_1 = pd.Series(0, index=runs.index)
                     rpi_2 = pd.Series(0, index=runs.index)
-                    rpi_all = runs / inns
+                    rpi_all = pd.to_numeric(runs / inns, errors='coerce').fillna(0)
                 
                 print(f"✅ Advanced statistics calculated")
                 
@@ -370,22 +376,29 @@ class CricketAnalytics:
             
             # Create the final DataFrame
             try:
+                # FIXED: Ensure all numeric conversions before .round() operations
+                sr_raw = (runs / balls * 100)
+                sr = pd.to_numeric(sr_raw, errors='coerce').fillna(0)
+                
+                dot_pct_numeric = pd.to_numeric(dot_pct, errors='coerce').fillna(0)
+                boundary_pct_numeric = pd.to_numeric(boundary_pct, errors='coerce').fillna(0)
+                
                 stats = pd.DataFrame({
                     'batsman': runs.index,
                     'runs': runs.values,
                     'innings': inns.values, 
                     'balls': balls.values,
-                    'SR': (runs / balls * 100).round(2),
+                    'SR': sr.round(2),
                     'hundreds': hundreds.reindex(runs.index, fill_value=0),
                     'fifties': fifties.reindex(runs.index, fill_value=0),
                     'hs': highest_score.reindex(runs.index, fill_value=0),
                     'RPI': rpi_all.round(2),
                     'RPI_1': rpi_1.reindex(runs.index, fill_value=0).round(2),
                     'RPI_2': rpi_2.reindex(runs.index, fill_value=0).round(2),
-                    'Dot%': dot_pct.round(2),
-                    'Boundary%': boundary_pct.round(2),
+                    'Dot%': dot_pct_numeric.round(2),
+                    'Boundary%': boundary_pct_numeric.round(2),
                     'BPD': bpd.round(2),
-                    'BPB': bpb.round(2).astype(int),
+                    'BPB': bpb.round(0).astype(int),  # FIXED: Convert to numeric first, then round, then int
                 })
                 
                 # Apply minimum innings filter
