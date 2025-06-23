@@ -21,16 +21,19 @@ except ImportError:
 class CricketAnalytics:
     def __init__(self, csv_file):
         try:
-            print("Initializing Cricket Analytics with full dataset...")
-            # Load complete dataset
+            print("Starting Cricket Analytics initialization...")
+            # Startup-safe loading
             self.df = self._load_csv_optimized(csv_file)
             self.prepare_data()
             self.optimize_memory()
-            print(f"✅ Successfully initialized with {len(self.df)} total records")
+            
+            matches = self.df['match_id'].nunique()
+            players = self.df['batsman'].nunique()
+            print(f"✅ Successfully loaded {len(self.df)} rows, {matches} matches, {players} players")
             self._monitor_memory("After initialization")
+            
         except MemoryError:
-            # Fallback still loads full dataset but with more optimization
-            print("Memory constraint detected, loading with enhanced optimization...")
+            print("Memory constraint detected, using fallback loading...")
             self.df = self._load_csv_fallback(csv_file)
             self.prepare_data()
             self.optimize_memory()
@@ -54,14 +57,23 @@ class CricketAnalytics:
             self.prepare_data()
 
     def _load_csv_optimized(self, csv_file):
-        """Load complete CSV with enhanced memory optimization"""
+        """Load CSV with startup-safe limits"""
         try:
-            print(f"Loading full dataset from {csv_file}...")
+            print(f"Loading dataset from {csv_file}...")
             
-            # Load complete dataset - no restrictions
-            df = pd.read_csv(csv_file, low_memory=True)
+            # CRITICAL: Use reasonable limits for startup to prevent crashes
+            if os.environ.get('RENDER'):
+                # For Render: Load manageable amount for stable startup
+                max_rows = 30000  # Balanced between coverage and memory
+                print(f"Render environment detected - loading first {max_rows} rows")
+            else:
+                # Local development: Much larger dataset
+                max_rows = 100000  # Still reasonable for local development
+                print("Local environment - loading expanded dataset")
+                
+            df = pd.read_csv(csv_file, nrows=max_rows, low_memory=True)
             
-            print(f"Loaded {len(df)} rows with {df['match_id'].nunique()} matches")
+            print(f"Successfully loaded {len(df)} rows with {df['match_id'].nunique()} matches")
             print(f"Players: {df['batsman'].nunique()}, Bowlers: {df['bowler'].nunique()}")
             
             # Force garbage collection after loading
@@ -73,16 +85,18 @@ class CricketAnalytics:
             raise
 
     def _load_csv_fallback(self, csv_file):
-        """Fallback loads complete dataset with enhanced optimization"""
-        print("Using fallback loading for complete dataset...")
+        """Startup-safe fallback"""
+        print("Using fallback loading...")
         try:
-            df = pd.read_csv(csv_file, low_memory=True)
+            # Conservative fallback for startup safety
+            max_rows = 20000 if os.environ.get('RENDER') else 25000
+            df = pd.read_csv(csv_file, nrows=max_rows, low_memory=True)
             print(f"Fallback loaded {len(df)} rows successfully")
             return df
         except Exception as e:
             print(f"Fallback error: {e}")
-            # Only if absolutely necessary, load partial data
-            return pd.read_csv(csv_file, nrows=50000, low_memory=True)
+            # Absolute minimum for startup
+            return pd.read_csv(csv_file, nrows=5000, low_memory=True)
 
     def _monitor_memory(self, stage=""):
         """Monitor memory usage for debugging"""
@@ -97,7 +111,7 @@ class CricketAnalytics:
             pass  # Fail silently if psutil not available
 
     def optimize_memory(self):
-        """Enhanced memory optimization for full dataset"""
+        """Enhanced memory optimization for dataset"""
         df = self.df
         
         print(f"Optimizing memory for {len(df)} rows...")
@@ -343,7 +357,7 @@ class CricketAnalytics:
     def get_multiple_head_to_head(self, bowlers, batsmen, innings_filter=None):
         results = []
         # Process in smaller batches to avoid memory issues
-        batch_size = 10  # Increased batch size since we have more memory available
+        batch_size = 8  # Conservative batch size for stability
         
         for i in range(0, len(bowlers), batch_size):
             bowler_batch = bowlers[i:i+batch_size]
