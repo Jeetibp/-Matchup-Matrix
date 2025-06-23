@@ -3,6 +3,7 @@ from cricket_analytics_core import CricketAnalytics
 import os
 import warnings
 import gc
+import sys
 
 # Suppress pandas warnings to reduce memory overhead
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
@@ -11,9 +12,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 't20blast2025')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
-# Enhanced production configuration
+# Enhanced production configuration for PythonAnywhere
 APP_ENV = os.environ.get('APP_ENV', 'production')
-if APP_ENV == 'production' or os.environ.get('RENDER'):
+if APP_ENV == 'production':
     app.config['DEBUG'] = False
     app.config['TESTING'] = False
     app.config['ENV'] = 'production'
@@ -43,9 +44,11 @@ def optimize_health_checks():
         return jsonify({'status': 'healthy'}), 200
 
 def available_leagues():
+    """Get available cricket leagues based on existing CSV files"""
     return {k: v for k, v in LEAGUE_CSVS.items() if os.path.exists(v)}
 
 def get_league():
+    """Get current selected league from request or session"""
     avail = available_leagues()
     league = request.args.get('league') or session.get('league') or 't20blast'
     if league not in avail:
@@ -54,6 +57,7 @@ def get_league():
     return league
 
 def get_analytics():
+    """Get cricket analytics instance with caching"""
     try:
         avail = available_leagues()
         league = get_league()
@@ -80,6 +84,7 @@ def get_analytics():
 
 @app.route('/')
 def home():
+    """Homepage with cricket analytics overview"""
     try:
         # Quick response for monitoring/health checks
         if 'Go-http-client' in request.headers.get('User-Agent', ''):
@@ -166,6 +171,7 @@ def home():
 
 @app.route("/batting")
 def batting():
+    """Batting statistics page"""
     try:
         analytics, league, error = get_analytics()
         leagues = available_leagues()
@@ -184,7 +190,7 @@ def batting():
         
         return render_template(
             "batting.html",
-            stats=stats.to_dict("records") if analytics and not stats.empty else [],
+            stats=stats.to_dict("records") if analytics and hasattr(stats, 'to_dict') and not stats.empty else [],
             min_innings=min_innings,
             innings_filter=innings_filter,
             league=league,
@@ -205,6 +211,7 @@ def batting():
 
 @app.route("/bowling")
 def bowling():
+    """Bowling statistics page"""
     try:
         analytics, league, error = get_analytics()
         leagues = available_leagues()
@@ -223,7 +230,7 @@ def bowling():
         
         return render_template(
             "bowling.html",
-            stats=stats.to_dict("records") if analytics and not stats.empty else [],
+            stats=stats.to_dict("records") if analytics and hasattr(stats, 'to_dict') and not stats.empty else [],
             min_innings=min_innings,
             innings_filter=innings_filter,
             league=league,
@@ -244,6 +251,7 @@ def bowling():
 
 @app.route("/headtohead", methods=["GET", "POST"])
 def headtohead():
+    """Head-to-head analysis page"""
     try:
         analytics, league, error = get_analytics()
         leagues = available_leagues()
@@ -366,6 +374,7 @@ def headtohead():
 # --- API for Fuzzy Player Suggestions ---
 @app.route('/api/player_fuzzy')
 def api_player_fuzzy():
+    """API endpoint for player name suggestions"""
     try:
         analytics, league, error = get_analytics()
         if not analytics:
@@ -399,6 +408,7 @@ def api_player_fuzzy():
 # --- API for Opponent Filtering for Dropdown (Smart Filter) ---
 @app.route('/api/get_opponents', methods=["POST"])
 def api_get_opponents():
+    """API endpoint for getting player opponents"""
     try:
         data = request.get_json()
         analytics, league, error = get_analytics()
@@ -427,6 +437,7 @@ def api_get_opponents():
 # --- API for Player Quick Stats ---
 @app.route('/api/player_stats')
 def api_player_stats():
+    """API endpoint for player quick stats"""
     try:
         analytics, league, error = get_analytics()
         if not analytics:
@@ -503,6 +514,7 @@ def api_player_stats():
 
 @app.route("/venuestats", methods=["GET"])
 def venuestats():
+    """Venue statistics page"""
     try:
         analytics, league, error = get_analytics()
         leagues = available_leagues()
@@ -578,6 +590,7 @@ def venuestats():
 
 @app.route("/user_guide")
 def user_guide():
+    """User guide page"""
     try:
         return render_template("user_guide.html")
     except Exception as e:
@@ -592,21 +605,24 @@ def user_guide():
 # Health check endpoint for monitoring
 @app.route('/health')
 def health_check():
+    """Health check endpoint"""
     return jsonify({'status': 'healthy', 'service': 'matchup-matrix'}), 200
 
 # Simple test route for debugging
 @app.route('/test')
 def test():
+    """Simple test endpoint"""
     return "🎉 Flask app is working! All systems operational."
 
 # Debug endpoint to check data loading
 @app.route('/debug')
 def debug():
+    """Debug endpoint to inspect loaded data"""
     try:
         analytics, league, error = get_analytics()
         if analytics:
             summary = analytics.get_data_summary()
-            sample_data = analytics.df.head(10).to_dict('records') if hasattr(analytics, 'df') else []
+            sample_data = analytics.df.head(5).to_dict('records') if hasattr(analytics, 'df') else []
             columns = list(analytics.df.columns) if hasattr(analytics, 'df') else []
             return jsonify({
                 'status': 'success',
@@ -633,6 +649,7 @@ def debug():
 # Status endpoint with memory info
 @app.route('/status')
 def status():
+    """Status endpoint with system information"""
     try:
         # Try to import psutil for memory info
         try:
@@ -649,36 +666,25 @@ def status():
             'status': 'operational',
             'leagues_available': len(available_leagues()),
             'analytics_cached': len(analytics_cache),
+            'python_version': sys.version,
             **memory_info
         })
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
-    
+
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 errors"""
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors"""
+    return render_template('500.html'), 500
+
+# PythonAnywhere specific configuration
 if __name__ == "__main__":
-    import os
-    
-    # Enhanced PORT handling for Render
+    # For local development only
     PORT = int(os.environ.get('PORT', 5000))
-    APP_ENV = os.environ.get('APP_ENV', 'production')
-    
-    # Check if running on Render
-    is_render = os.environ.get('RENDER') is not None
-    
-    if APP_ENV == 'production' or is_render:
-        print(f"🚀 Starting Flask app in PRODUCTION mode on port {PORT}")
-        print(f"🔧 Environment: {'Render' if is_render else 'Production'}")
-        app.run(
-            host='0.0.0.0',          # Accept connections from any IP
-            port=PORT,               # Use Render's assigned port
-            debug=False,             # Disable debug mode
-            threaded=True           # Enable threading for better performance
-        )
-    else:
-        # Development configuration  
-        print("🟢 app.py loaded!")
-        print(f"🏏 Flask server starting at http://localhost:{PORT}/")
-        app.run(
-            host='localhost',
-            port=PORT,
-            debug=True
-        )
+    app.run(host='0.0.0.0', port=PORT, debug=True)
