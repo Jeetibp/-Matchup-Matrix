@@ -156,13 +156,25 @@ class CricketAnalytics:
     def get_batting_stats(self, min_innings=5, innings_filter=None):
         try:
             self._monitor_memory("Before batting stats")
-            df = self.df
+            
+            # CRITICAL FIX: Work on a copy and convert categorical columns to strings
+            df = self.df.copy()
             if innings_filter in [1,2]:
                 df = df[df['innings'] == innings_filter]
             
-            # CRITICAL FIX: Add observed=True to suppress FutureWarnings
-            match_runs = df.groupby(['batsman', 'match_id'], observed=True)['runs_of_bat'].sum().reset_index()
-            batsman_match_scores = match_runs.groupby('batsman', observed=True)['runs_of_bat'].agg(list)
+            # Convert categorical columns to strings to avoid groupby comparison issues
+            categorical_cols = df.select_dtypes(include=['category']).columns
+            for col in categorical_cols:
+                if col in ['batsman', 'match_id', 'bowler']:  # Only convert columns used in groupby
+                    df[col] = df[col].astype(str)
+            
+            # Ensure player_dismissed is also string for comparison
+            if 'player_dismissed' in df.columns:
+                df['player_dismissed'] = df['player_dismissed'].astype(str)
+            
+            # Per-match group for 100s, 50s, highest
+            match_runs = df.groupby(['batsman', 'match_id'])['runs_of_bat'].sum().reset_index()
+            batsman_match_scores = match_runs.groupby('batsman')['runs_of_bat'].agg(list)
             
             # Memory cleanup between operations
             del match_runs
@@ -172,24 +184,25 @@ class CricketAnalytics:
             fifties = batsman_match_scores.apply(lambda scores: sum(1 for s in scores if 50 <= s < 100))
             highest_score = batsman_match_scores.apply(lambda scores: max(scores) if scores else 0)
             
-            # Main stats with observed=True to eliminate warnings
-            runs = df.groupby('batsman', observed=True)['runs_of_bat'].sum()
-            balls = df.groupby('batsman', observed=True).size()
-            inns = df.groupby('batsman', observed=True)['match_id'].nunique()
-            fours = df.groupby('batsman', observed=True)['isFour'].sum()
-            sixes = df.groupby('batsman', observed=True)['isSix'].sum()
-            dot_pct = df.groupby('batsman', observed=True)['isDot'].sum() / balls * 100
+            # Main stats
+            runs = df.groupby('batsman')['runs_of_bat'].sum()
+            balls = df.groupby('batsman').size()
+            inns = df.groupby('batsman')['match_id'].nunique()
+            fours = df.groupby('batsman')['isFour'].sum()
+            sixes = df.groupby('batsman')['isSix'].sum()
+            dot_pct = df.groupby('batsman')['isDot'].sum() / balls * 100
             boundary_pct = (fours + sixes) / balls * 100
             
-            # Dismissals, BPD, BPB with observed=True
-            dismissals = df[df['player_dismissed'] == df['batsman']].groupby('batsman', observed=True)['player_dismissed'].count()
+            # Dismissals, BPD, BPB - Fixed to handle string comparison properly
+            dismissed_df = df[df['player_dismissed'] == df['batsman']]
+            dismissals = dismissed_df.groupby('batsman')['player_dismissed'].count()
             bpd = balls / dismissals.replace(0, pd.NA)
             bpb = balls / (fours + sixes).replace(0, pd.NA)
             
-            # RPI calculations with observed=True
+            # RPI calculations
             rpi_all = runs / inns
-            rpi_1 = df[df['innings']==1].groupby('batsman', observed=True)['runs_of_bat'].sum() / df[df['innings']==1].groupby('batsman', observed=True)['match_id'].nunique()
-            rpi_2 = df[df['innings']==2].groupby('batsman', observed=True)['runs_of_bat'].sum() / df[df['innings']==2].groupby('batsman', observed=True)['match_id'].nunique()
+            rpi_1 = df[df['innings']==1].groupby('batsman')['runs_of_bat'].sum() / df[df['innings']==1].groupby('batsman')['match_id'].nunique()
+            rpi_2 = df[df['innings']==2].groupby('batsman')['runs_of_bat'].sum() / df[df['innings']==2].groupby('batsman')['match_id'].nunique()
             
             stats = pd.DataFrame({
                 'batsman': runs.index,
@@ -206,24 +219,21 @@ class CricketAnalytics:
                 'Dot%': dot_pct.round(2).fillna(0),
                 'Boundary%': boundary_pct.round(2).fillna(0),
                 'BPD': bpd.round(2).fillna(0),
-                'BPB': bpb.round(2).fillna(0).infer_objects(copy=False).astype(int),
+                'BPB': bpb.round(2).fillna(0).astype('int64'),  # Use int64 to avoid buffer issues
             })
             
             stats = stats[stats['innings']>=min_innings].fillna(0).sort_values('runs',ascending=False).reset_index(drop=True)
             
             # Aggressive memory cleanup
-            del runs, balls, inns, fours, sixes, dot_pct, boundary_pct, dismissals, bpd, bpb, rpi_all, rpi_1, rpi_2
+            del runs, balls, inns, fours, sixes, dot_pct, boundary_pct, dismissals, bpd, bpb, rpi_all, rpi_1, rpi_2, df, dismissed_df
             gc.collect()
             
             self._monitor_memory("After batting stats")
             return stats
             
-        except MemoryError:
-            print("Memory limit reached in batting stats, returning limited data")
-            return pd.DataFrame(columns=['batsman', 'runs', 'innings', 'balls', 'SR'])
         except Exception as e:
             print(f"Error in batting stats: {e}")
-            return pd.DataFrame(columns=['batsman', 'runs', 'innings', 'balls', 'SR'])
+            return pd.DataFrame(columns=['batsman', 'runs', 'innings', 'balls', 'SR', 'hundreds', 'fifties', 'hs', 'RPI', 'RPI_1', 'RPI_2', 'Dot%', 'Boundary%', 'BPD', 'BPB'])
 
     def get_bowling_stats(self, min_innings=3, innings_filter=None):
         try:
