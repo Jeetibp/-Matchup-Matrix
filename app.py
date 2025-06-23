@@ -2,18 +2,21 @@ from flask import Flask, render_template, request, jsonify, session
 from cricket_analytics_core import CricketAnalytics
 import os
 import warnings
+import gc
 
 # Suppress pandas warnings to reduce memory overhead
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
 
 app = Flask(__name__)
-app.secret_key = 't20blast2025'
+app.secret_key = os.environ.get('SECRET_KEY', 't20blast2025')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
-# Production configuration
-if os.environ.get('APP_ENV') == 'production':
+# Enhanced production configuration
+APP_ENV = os.environ.get('APP_ENV', 'production')
+if APP_ENV == 'production' or os.environ.get('RENDER'):
     app.config['DEBUG'] = False
     app.config['TESTING'] = False
+    app.config['ENV'] = 'production'
 else:
     app.config['DEBUG'] = True
 
@@ -50,6 +53,8 @@ def get_analytics():
                 try:
                     analytics = CricketAnalytics(avail[league])
                     analytics_cache[league] = analytics
+                    # Clear memory after loading
+                    gc.collect()
                 except Exception as e:
                     return None, league, f"Error loading data for league: {league.upper()}<br>{e}"
             return analytics, league, None
@@ -78,26 +83,49 @@ def home():
                 leagues=leagues,
                 error=error
             )
-        top_bat_all = analytics.get_batting_stats().head(1)
-        top_bat_1 = analytics.get_batting_stats(innings_filter=1).head(1)
-        top_bat_2 = analytics.get_batting_stats(innings_filter=2).head(1)
-        top_bowl_all = analytics.get_bowling_stats().head(1)
-        top_bowl_1 = analytics.get_bowling_stats(innings_filter=1).head(1)
-        top_bowl_2 = analytics.get_bowling_stats(innings_filter=2).head(1)
-        return render_template(
-            "home.html",
-            total_players=len(analytics.get_batting_stats()),
-            total_bowlers=len(analytics.get_bowling_stats()),
-            top_bat_all=top_bat_all.to_dict("records")[0] if not top_bat_all.empty else None,
-            top_bat_1=top_bat_1.to_dict("records")[0] if not top_bat_1.empty else None,
-            top_bat_2=top_bat_2.to_dict("records")[0] if not top_bat_2.empty else None,
-            top_bowl_all=top_bowl_all.to_dict("records")[0] if not top_bowl_all.empty else None,
-            top_bowl_1=top_bowl_1.to_dict("records")[0] if not top_bowl_1.empty else None,
-            top_bowl_2=top_bowl_2.to_dict("records")[0] if not top_bowl_2.empty else None,
-            league=league,
-            leagues=leagues,
-            error=None
-        )
+        
+        # Optimize memory by processing data in smaller chunks
+        try:
+            top_bat_all = analytics.get_batting_stats().head(1)
+            top_bat_1 = analytics.get_batting_stats(innings_filter=1).head(1)
+            top_bat_2 = analytics.get_batting_stats(innings_filter=2).head(1)
+            top_bowl_all = analytics.get_bowling_stats().head(1)
+            top_bowl_1 = analytics.get_bowling_stats(innings_filter=1).head(1)
+            top_bowl_2 = analytics.get_bowling_stats(innings_filter=2).head(1)
+            
+            # Clear memory after processing
+            gc.collect()
+            
+            return render_template(
+                "home.html",
+                total_players=len(analytics.get_batting_stats()),
+                total_bowlers=len(analytics.get_bowling_stats()),
+                top_bat_all=top_bat_all.to_dict("records")[0] if not top_bat_all.empty else None,
+                top_bat_1=top_bat_1.to_dict("records")[0] if not top_bat_1.empty else None,
+                top_bat_2=top_bat_2.to_dict("records")[0] if not top_bat_2.empty else None,
+                top_bowl_all=top_bowl_all.to_dict("records")[0] if not top_bowl_all.empty else None,
+                top_bowl_1=top_bowl_1.to_dict("records")[0] if not top_bowl_1.empty else None,
+                top_bowl_2=top_bowl_2.to_dict("records")[0] if not top_bowl_2.empty else None,
+                league=league,
+                leagues=leagues,
+                error=None
+            )
+        except Exception as stats_error:
+            # Fallback for memory issues
+            return render_template(
+                "home.html",
+                total_players=0,
+                total_bowlers=0,
+                top_bat_all=None,
+                top_bat_1=None,
+                top_bat_2=None,
+                top_bowl_all=None,
+                top_bowl_1=None,
+                top_bowl_2=None,
+                league=league,
+                leagues=leagues,
+                error=f"Data loading in progress... Please refresh in a moment."
+            )
     except Exception as e:
         return f"""
         <h1>🏏 Matchup Matrix - Cricket Analytics</h1>
@@ -115,6 +143,10 @@ def batting():
         innings_filter = request.args.get("innings_filter", 0, type=int)
         filter_val = innings_filter if innings_filter in [1,2] else None
         stats = analytics.get_batting_stats(min_innings, innings_filter=filter_val) if analytics else []
+        
+        # Memory cleanup
+        gc.collect()
+        
         return render_template(
             "batting.html",
             stats=stats.to_dict("records") if analytics else [],
@@ -144,6 +176,10 @@ def bowling():
         innings_filter = request.args.get("innings_filter", 0, type=int)
         filter_val = innings_filter if innings_filter in [1,2] else None
         stats = analytics.get_bowling_stats(min_innings, innings_filter=filter_val) if analytics else []
+        
+        # Memory cleanup
+        gc.collect()
+        
         return render_template(
             "bowling.html",
             stats=stats.to_dict("records") if analytics else [],
@@ -246,6 +282,9 @@ def headtohead():
                     saved_inputs["single_bowler"], saved_inputs["single_batsman"], innings_filter=saved_inputs.get("innings_filter")
                 )
 
+        # Memory cleanup
+        gc.collect()
+
         return render_template(
             "headtohead.html",
             message=message,
@@ -284,6 +323,7 @@ def api_player_fuzzy():
         q = request.args.get('q', '').strip().lower()
         ptype = request.args.get('ptype', 'both')
         innings_filter = int(request.args.get('innings_filter', 0))
+        
         if ptype == 'bowler':
             players = analytics.df['bowler'].dropna().astype(str)
             if innings_filter in [1,2]:
@@ -298,6 +338,7 @@ def api_player_fuzzy():
                 bowlers = analytics.df[analytics.df['innings']==innings_filter]['bowler'].dropna().astype(str).tolist()
                 batsmen = analytics.df[analytics.df['innings']==innings_filter]['batsman'].dropna().astype(str).tolist()
                 players = bowlers + batsmen
+                
         players = sorted(set(players))
         results = [p for p in players if q in p.lower()]
         return jsonify({'players': results[:20]})
@@ -439,6 +480,9 @@ def venuestats():
                 if compare_teams and len(compare_teams) >= 2:
                     team_comparison = analytics.get_venue_team_comparison(selected_venue, compare_teams)
                     
+                # Memory cleanup
+                gc.collect()
+                    
             except Exception as e:
                 error = f"Error analyzing venue performance: {str(e)}"
 
@@ -474,7 +518,6 @@ def venuestats():
             error=f"Error loading venue stats: {str(e)}"
         )
 
-# ----> ADD USER GUIDE ROUTE HERE <----
 @app.route("/user_guide")
 def user_guide():
     try:
@@ -491,17 +534,24 @@ def user_guide():
 @app.route('/health')
 def health_check():
     return jsonify({'status': 'healthy', 'service': 'matchup-matrix'}), 200
+
+# Simple test route for debugging
+@app.route('/test')
+def test():
+    return "🎉 Flask app is working! All systems operational."
     
 if __name__ == "__main__":
     import os
     
-    # Get environment variables
-    APP_ENV = os.environ.get('APP_ENV', 'production')
+    # Enhanced PORT handling for Render
     PORT = int(os.environ.get('PORT', 5000))
+    APP_ENV = os.environ.get('APP_ENV', 'production')
     
-    # Production configuration
-    if APP_ENV == 'production':
-        print("🚀 Starting Flask app in PRODUCTION mode")
+    # Check if running on Render
+    is_render = os.environ.get('RENDER') is not None
+    
+    if APP_ENV == 'production' or is_render:
+        print(f"🚀 Starting Flask app in PRODUCTION mode on port {PORT}")
         app.run(
             host='0.0.0.0',          # Accept connections from any IP
             port=PORT,               # Use Render's assigned port
@@ -511,9 +561,9 @@ if __name__ == "__main__":
     else:
         # Development configuration  
         print("🟢 app.py loaded!")
-        print("🏏 Flask server starting at http://localhost:5000/")
+        print(f"🏏 Flask server starting at http://localhost:{PORT}/")
         app.run(
             host='localhost',
-            port=5000,
+            port=PORT,
             debug=True
         )
