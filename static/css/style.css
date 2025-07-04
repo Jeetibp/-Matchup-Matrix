@@ -1,50 +1,49 @@
 body {
   background-image: url('background.png');
-  background-size: cover;           /* Cover entire viewport */
-  background-repeat: no-repeat;     /* Don’t tile */
-  background-position: center;      /* Center the image */
-  background-attachment: fixed;     /* Fix image on scroll */
-  background-color: #fff;           /* fallback color if image doesn't load */
-  position: relative;               /* needed for overlay */
-  margin: 0;                       /* remove default margin */
-  min-height: 100vh;               /* full viewport height */
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-attachment: fixed;
+  background-color: #fff;
+  position: relative;
+  margin: 0;
+  min-height: 100vh;
   font-family: Arial, sans-serif;
-  color: #333;                     /* default text color */
+  color: #333;
 }
 
-/* Optional: Overlay to improve text readability but exclude navbar area */
+/* Overlay for readability */
 body::before {
   content: "";
   position: fixed;
-  top: 56px; /* Height of navbar - adjust if navbar height differs */
+  top: 56px;
   left: 0; right: 0; bottom: 0;
-  background: rgba(255, 255, 255, 0.6); /* white semi-transparent overlay */
-  pointer-events: none;            /* allows clicking through overlay */
-  z-index: -1;                    /* behind content */
+  background: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+  z-index: -1;
 }
 
-/* Navbar style: solid background to improve visibility */
+/* Navbar style */
 .navbar {
-  background-color: rgba(0, 123, 255, 0.95) !important; /* Bootstrap primary blue with slight transparency */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* subtle shadow */
+  background-color: rgba(0, 123, 255, 0.95) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Fix navbar text color and add subtle shadow for contrast */
 .navbar .navbar-brand,
 .navbar .nav-link {
-  color: #fff !important; /* solid white */
+  color: #fff !important;
   font-weight: 600;
-  text-shadow: 0 0 3px rgba(0, 0, 0, 0.5); /* subtle black shadow */
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
 }
 
 .navbar .nav-link:hover,
 .navbar .nav-link:focus {
-  color: #ffdd57 !important; /* bright yellow on hover/focus */
+  color: #ffdd57 !important;
 }
 
-/* Improve readability of tables on background */
+/* Table readability */
 table.table tbody tr {
-  background-color: rgba(255, 255, 255, 0.85); /* white with some transparency */
+  background-color: rgba(255, 255, 255, 0.85);
 }
 
 table.table thead th {
@@ -53,14 +52,48 @@ table.table thead th {
   color: #000;
 }
 
-/* Optional: Table text color */
 table.table, table.table tbody tr, table.table thead th {
   color: #222;
 }
 
-/* Optional: Add padding and rounded corners to containers */
+/* Container and card padding/rounding */
 .container, .card {
   background-color: rgba(255, 255, 255, 0.85);
   border-radius: 10px;
   padding: 15px;
+}
+
+/* Responsive tweaks for mobile */
+@media (max-width: 576px) {
+  .container, .card {
+    padding: 6px;
+    border-radius: 6px;
+  }
+  h1, h2, h3, h4, h5 {
+    font-size: 1.1rem;
+  }
+  .navbar .navbar-brand {
+    font-size: 1rem;
+  }
+  .table, .table th, .table td {
+    font-size: 13px;
+    padding: 0.3rem 0.5rem;
+  }
+  .form-control, .form-select, .btn {
+    font-size: 14px;
+  }
+  .card-header, .card-body {
+    padding: 8px;
+  }
+  .navbar {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}
+
+/* Optional: Make buttons easier to tap on mobile */
+@media (max-width: 576px) {
+  .btn, .form-control, .form-select {
+    min-height: 38px;
+  }
 }

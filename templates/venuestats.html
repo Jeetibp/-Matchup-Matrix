@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container">
-  <h2 class="mb-4">🏟️ Enhanced Venue Analysis</h2>
+<div class="container-fluid px-1 px-md-4">
+  <h2 class="mb-4 mt-3">🏟️ Enhanced Venue Analysis</h2>
   
   <!-- Venue Selection Form -->
   <form method="get" class="mb-4">
-    <div class="row">
-      <div class="col-md-4">
+    <div class="row g-2">
+      <div class="col-md-4 col-12 mb-2 mb-md-0">
         <select name="venue" class="form-select" onchange="this.form.submit()">
           <option value="">-- Select Venue --</option>
           {% for v in venues %}
@@ -14,7 +14,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-4 col-12 mb-2 mb-md-0">
         <select name="team" class="form-select" {% if not selected_venue %}disabled{% endif %}>
           <option value="">-- Single Team Analysis --</option>
           {% for t in teams %}
@@ -22,11 +22,10 @@
           {% endfor %}
         </select>
       </div>
-      <!-- Multi-team compare dropdown removed -->
-      <div class="col-md-2">
+      <div class="col-md-2 col-6 mb-2 mb-md-0">
         <button class="btn btn-primary w-100" type="submit">Analyze</button>
       </div>
-      <div class="col-md-2">
+      <div class="col-md-2 col-6">
         <button class="btn btn-secondary w-100" type="button" id="refreshBtn">
           <i class="fas fa-refresh"></i> Refresh
         </button>
@@ -42,7 +41,7 @@
     </div>
     <div class="card-body">
       <div class="row">
-        <div class="col-md-6">
+        <div class="col-md-6 col-12 mb-2 mb-md-0">
           <table class="table table-bordered">
             <tr><th>Total Matches</th><td><strong>{{ venue_characteristics.total_matches }}</strong></td></tr>
             <tr><th>Average 1st Innings</th><td>{{ venue_characteristics.avg_1st_innings }}</td></tr>
@@ -50,7 +49,7 @@
             <tr><th>Chase Success Rate</th><td><span class="badge bg-info">{{ venue_characteristics.chase_success_rate }}%</span></td></tr>
           </table>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 col-12">
           <table class="table table-bordered">
             <tr><th>Boundary Rate</th><td>{{ venue_characteristics.boundary_rate }}% per ball</td></tr>
             <tr><th>High Scores (150+)</th><td><span class="badge bg-success">{{ venue_characteristics.high_scores }}</span></td></tr>
@@ -71,7 +70,7 @@
     </div>
     <div class="card-body">
       <div class="row text-center">
-        <div class="col-md-4">
+        <div class="col-md-4 col-12 mb-2 mb-md-0">
           <div class="card bg-light">
             <div class="card-body">
               <h6>Highest Individual Score</h6>
@@ -80,7 +79,7 @@
             </div>
           </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 col-12 mb-2 mb-md-0">
           <div class="card bg-light">
             <div class="card-body">
               <h6>Best Bowling Figures</h6>
@@ -89,7 +88,7 @@
             </div>
           </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 col-12">
           <div class="card bg-light">
             <div class="card-body">
               <h6>Most Sixes (Innings)</h6>
@@ -163,7 +162,7 @@
     <div class="card-body">
       <div class="row">
         <!-- Basic Stats -->
-        <div class="col-md-6">
+        <div class="col-md-6 col-12 mb-2 mb-md-0">
           <h6 class="text-primary"><i class="fas fa-info-circle"></i> Basic Statistics</h6>
           <table class="table table-bordered table-sm">
             <tbody>
@@ -187,7 +186,7 @@
           </table>
         </div>
         <!-- Score Records -->
-        <div class="col-md-6">
+        <div class="col-md-6 col-12">
           <h6 class="text-success"><i class="fas fa-trophy"></i> Score Records</h6>
           <table class="table table-bordered table-sm">
             <tbody>
@@ -281,10 +280,10 @@
 
       <!-- Chart Visualization -->
       <div class="row mt-4">
-        <div class="col-md-6">
+        <div class="col-md-6 col-12 mb-2 mb-md-0">
           <canvas id="winChart" width="300" height="200"></canvas>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 col-12">
           <canvas id="avgChart" width="300" height="200"></canvas>
         </div>
       </div>
@@ -404,4 +403,12 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<style>
+@media (max-width: 576px) {
+    h2, h4, h5 { font-size: 1.15rem; }
+    .table, .table-bordered, .table-striped { font-size: 13px; }
+    .form-control, .form-select, .btn { font-size: 14px; }
+    .card-header, .card-body { padding: 10px; }
+}
+</style>
 {% endblock %}
