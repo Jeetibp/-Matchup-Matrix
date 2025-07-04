@@ -102,7 +102,7 @@ document.getElementById('league-select').addEventListener('change', function() {
                     </div>
                     <div class="input-mode keyboard-mode" style="display: none;">
                         <div class="position-relative">
-                            <input type="text" id="bowler_input" class="form-control autocomplete-input"
+                            <input type="text" id="bowler_input" name="bowler" class="form-control autocomplete-input"
                                    placeholder="Type bowler last name..." value="{{ saved_inputs.single_bowler }}"
                                    autocomplete="off">
                             <div id="bowler_suggestions" class="suggestions-dropdown"></div>
@@ -123,7 +123,7 @@ document.getElementById('league-select').addEventListener('change', function() {
                     </div>
                     <div class="input-mode keyboard-mode" style="display: none;">
                         <div class="position-relative">
-                            <input type="text" id="batsman_input" class="form-control autocomplete-input"
+                            <input type="text" id="batsman_input" name="batsman" class="form-control autocomplete-input"
                                    placeholder="Type batsman last name..." value="{{ saved_inputs.single_batsman }}"
                                    autocomplete="off">
                             <div id="batsman_suggestions" class="suggestions-dropdown"></div>
@@ -300,6 +300,17 @@ function switchMode(mode) {
     document.querySelectorAll('.keyboard-mode').forEach(el => el.style.display = (mode === 'keyboard') ? 'block' : 'none');
     document.getElementById('toggle-dropdown').classList.toggle('active', mode === 'dropdown');
     document.getElementById('toggle-keyboard').classList.toggle('active', mode === 'keyboard');
+
+    // --- THE IMPORTANT FIX ---
+    // Enable only the visible input fields, so Flask gets the right value
+    let bowlerSelect = document.getElementById('bowler_select');
+    let batsmanSelect = document.getElementById('batsman_select');
+    let bowlerInput = document.getElementById('bowler_input');
+    let batsmanInput = document.getElementById('batsman_input');
+    if (bowlerSelect) bowlerSelect.disabled = (mode === 'keyboard');
+    if (batsmanSelect) batsmanSelect.disabled = (mode === 'keyboard');
+    if (bowlerInput) bowlerInput.disabled = (mode === 'dropdown');
+    if (batsmanInput) batsmanInput.disabled = (mode === 'dropdown');
 }
 document.getElementById('toggle-dropdown').addEventListener('click', () => switchMode('dropdown'));
 document.getElementById('toggle-keyboard').addEventListener('click', () => switchMode('keyboard'));
