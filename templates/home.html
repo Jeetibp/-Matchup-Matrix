@@ -58,15 +58,20 @@ document.getElementById('league-select').addEventListener('change', function() {
     </div>
 </div>
 
-<h1 class="mb-4">
-    {% if league == 't20blast' %}T20 Blast
-    {% elif league == 'ipl' %}IPL
-    {% elif league == 'psl' %}PSL
-    {% elif league == 'the100' %}The Hundred
-    {% elif league == 'cpl' %}CPL
-    {% else %}Cricket
-    {% endif %} Analytics Dashboard
-</h1>
+{% set league_names = {
+    't20blast': 'T20 Blast',
+    'ipl': 'IPL',
+    'bbl': 'BBL',
+    'bpl': 'BPL',
+    'cpl': 'CPL',
+    'mlc': 'MLC',
+    'ilt': 'ILT20',
+    'lpl': 'LPL',
+    'npl': 'NPL',
+    'the100': 'The Hundred',
+    'the100women': 'The Hundred (Women)'
+} %}
+<h1 class="mb-4">{{ league_names.get(league, league|upper) }} Analytics Dashboard</h1>
 
 <style>
 .suggestions-dropdown {

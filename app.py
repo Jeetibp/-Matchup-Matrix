@@ -22,12 +22,17 @@ else:
     app.config['DEBUG'] = True
 
 LEAGUE_CSVS = {
-    't20blast': 'data/all_matches_t20blast.csv',
-    'mcl':     'data/all_matches_mcl.csv',
-    'ipl':     'data/all_matches_ipl.csv',
-    'the100':  'data/all_matches_the100.csv',
-    'cpl':     'data/all_matches_cpl.csv',
-    'the100women': 'data/all_matches_the100women.csv'
+    't20blast':    'data/all_matches_t20blast.csv',
+    'mlc':         'data/all_matches_MLC.csv',
+    'ipl':         'data/all_matches_ipl.csv',
+    'the100':      'data/all_matches_the100.csv',
+    'cpl':         'data/all_matches_cpl.csv',
+    'the100women': 'data/all_matches_the100women.csv',
+    'bbl':         'data/all_matches_bbl.csv',
+    'bpl':         'data/all_matches_bpl.csv',
+    'ilt':         'data/all_matches_ilt.csv',
+    'lpl':         'data/all_matches_LPL.csv',
+    'npl':         'data/all_matches_NPL.csv',
 }
 
 analytics_cache = {}
