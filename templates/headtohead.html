@@ -1,33 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-<!-- League Selector (Top of Page) -->
-{% if leagues %}
-<div class="row mb-3">
-    <div class="col-md-4 col-12 mb-2 mb-md-0">
-        <select id="league-select" class="form-select">
-            {% for key, path in leagues.items() %}
-                <option value="{{ key }}" {% if league == key %}selected{% endif %}>
-                    {{ key|upper }}
-                </option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-8 col-12 align-self-center">
-        <small class="text-info ms-2">
-            Filter by league. Changing league reloads page with the selected league’s data.
-        </small>
-    </div>
-</div>
-<script>
-document.getElementById('league-select').addEventListener('change', function() {
-    const league = this.value;
-    const url = new URL(window.location.href);
-    url.searchParams.set('league', league);
-    window.location.href = url.toString();
-});
-</script>
-{% endif %}
 
 <div class="row">
     <div class="col-12">

@@ -1,34 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-<!-- League Selector (Top of Page) -->
-{% if leagues %}
-<div class="row mb-3">
-    <div class="col-md-4 col-12 mb-2 mb-md-0">
-        <select id="league-select" class="form-select">
-            {% for key, path in leagues.items() %}
-                <option value="{{ key }}" {% if league == key %}selected{% endif %}>
-                    {{ key|upper }}
-                </option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-8 col-12 align-self-center">
-        <small class="text-info ms-2">
-            Filter by league. Changing league reloads page with the selected league’s data.
-        </small>
-    </div>
-</div>
-<script>
-document.getElementById('league-select').addEventListener('change', function() {
-    const league = this.value;
-    const url = new URL(window.location.href);
-    url.searchParams.set('league', league);
-    window.location.href = url.toString();
-});
-</script>
-{% endif %}
-
 <!-- Player Database & Quick Search card FIRST! -->
 <div class="card mt-2 mb-4">
     <div class="card-header bg-dark text-white">
@@ -36,8 +8,8 @@ document.getElementById('league-select').addEventListener('change', function() {
     </div>
     <div class="card-body">
         <form id="player-search-form" autocomplete="off" class="row g-2 align-items-end">
-            <div class="col-md-5 col-12 mb-2 mb-md-0">
-                <input type="text" id="player-search-input" class="form-control" placeholder="Type player last name only, e.g. 'Kohli' or 'Dhoni'..." autocomplete="off">
+            <div class="col-md-4 col-12 mb-2 mb-md-0" style="position:relative;">
+                <input type="text" id="player-search-input" class="form-control" placeholder="e.g. 'Kohli', 'Dhoni', or 'Virat Kohli'..." autocomplete="off">
                 <div id="player-suggestions" class="suggestions-dropdown"></div>
             </div>
             <div class="col-md-2 col-6 mb-2 mb-md-0">
@@ -46,7 +18,12 @@ document.getElementById('league-select').addEventListener('change', function() {
                     <option value="bowler">Bowler</option>
                 </select>
             </div>
-            <div class="col-md-3 col-6 mb-2 mb-md-0">
+            <div class="col-md-2 col-6 mb-2 mb-md-0">
+                <select id="season-filter" class="form-select">
+                    <option value="all">All Seasons</option>
+                </select>
+            </div>
+            <div class="col-md-2 col-6 mb-2 mb-md-0">
                 <button type="submit" class="btn btn-dark w-100">🔎 Show Stats</button>
             </div>
             <div class="col-md-2 col-12">
@@ -102,6 +79,7 @@ let activeIdx = -1, suggestions = [];
 playerInput.addEventListener('input', function() {
     const q = playerInput.value.trim();
     const league = document.getElementById('league-select').value;
+    activeIdx = -1;
     if (!q) { suggestionBox.style.display = 'none'; return; }
     fetch(`/api/player_fuzzy?q=${encodeURIComponent(q)}&league=${league}`)
         .then(resp=>resp.json())
@@ -136,6 +114,25 @@ document.addEventListener('click', e=>{
     if (!e.target.closest('#player-search-input')) suggestionBox.style.display='none';
 });
 
+// Load seasons for selected league
+function loadSeasons(leagueVal) {
+    fetch(`/api/get_seasons?league=${encodeURIComponent(leagueVal)}`)
+        .then(r => r.json())
+        .then(data => {
+            const sel = document.getElementById('season-filter');
+            const prev = sel.value;
+            sel.innerHTML = '<option value="all">All Seasons</option>';
+            (data.seasons || []).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s; opt.textContent = s;
+                if (s === prev) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }).catch(() => {});
+}
+// Populate seasons on page load
+loadSeasons(document.getElementById('league-select') ? document.getElementById('league-select').value : '');
+
 // Search form submit (fetch and show player stats)
 document.getElementById('player-search-form').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -143,15 +140,19 @@ document.getElementById('player-search-form').addEventListener('submit', functio
     const league = document.getElementById('league-select').value;
     if (!name) return;
     const ptype = document.getElementById('player-type').value;
-    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}`)
+    const season = document.getElementById('season-filter').value;
+    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}&season=${encodeURIComponent(season)}`)
       .then(r=>r.json())
       .then(data=>{
         let html = '';
+        const seasonLabel = (season && season !== 'all') ? `<span class="badge bg-secondary ms-2">Season: ${season}</span>` : '';
         if (data.error) { html = `<div class='alert alert-danger'>${data.error}</div>`; }
         else if (ptype==='batsman') {
+            const resolvedLabel = (data.resolved_name && data.resolved_name.toLowerCase() !== name.toLowerCase())
+                ? `<code class="ms-2 text-muted" style="font-size:0.82em;">${data.resolved_name}</code>` : '';
             html = `<div class='card player-database-card'>
             <button class='btn-close btn-close-quickstats' aria-label='Close' onclick="closePlayerStats()" style="position:absolute;top:8px;right:12px;"></button>
-            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-primary ms-2">Batsman</span></h5>
+            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-primary ms-2">Batsman</span>${resolvedLabel}${seasonLabel}</h5>
             <div class='row'>
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
@@ -167,16 +168,18 @@ document.getElementById('player-search-form').addEventListener('submit', functio
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
               <tr><th>Dot %</th><td>${data.dot_pct}%</td></tr>
-              <tr><th>BPD</th><td>${data.bpd && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
-              <tr><th>BPB</th><td>${data.bpb && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
+              <tr><th>BPD</th><td>${typeof data.bpd === 'number' && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
+              <tr><th>BPB</th><td>${typeof data.bpb === 'number' && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
             </table>
             </div>
             </div>
             </div>`;
         } else {
+            const resolvedLabel = (data.resolved_name && data.resolved_name.toLowerCase() !== name.toLowerCase())
+                ? `<code class="ms-2 text-muted" style="font-size:0.82em;">${data.resolved_name}</code>` : '';
             html = `<div class='card player-database-card'>
             <button class='btn-close btn-close-quickstats' aria-label='Close' onclick="closePlayerStats()" style="position:absolute;top:8px;right:12px;"></button>
-            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-success ms-2">Bowler</span></h5>
+            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-success ms-2">Bowler</span>${resolvedLabel}${seasonLabel}</h5>
             <div class='row'>
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
@@ -193,8 +196,8 @@ document.getElementById('player-search-form').addEventListener('submit', functio
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
               <tr><th>Dot %</th><td>${data.dot_pct}%</td></tr>
-              <tr><th>BPD</th><td>${data.bpd && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
-              <tr><th>BPB</th><td>${data.bpb && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
+              <tr><th>BPD</th><td>${typeof data.bpd === 'number' && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
+              <tr><th>BPB</th><td>${typeof data.bpb === 'number' && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
             </table>
             </div>
             </div>
@@ -202,6 +205,8 @@ document.getElementById('player-search-form').addEventListener('submit', functio
         }
         document.getElementById('player-result-card').innerHTML = html;
         refreshBtn.style.display = "inline-block";
+        activeIdx = -1;
+        playerInput.focus();
       });
 });
 

@@ -15,6 +15,15 @@
     <style>
         /* Extra mobile-friendly tweaks */
         .navbar-brand { font-size: 1.2rem; }
+        #league-select {
+            background-color: #fff;
+            color: #212529;
+            border-color: rgba(255,255,255,0.6);
+            min-width: 150px;
+            max-width: 175px;
+            font-size: 0.82rem;
+        }
+        #league-select option { background-color: #fff; color: #212529; }
         @media (max-width: 991.98px) {
             .navbar-nav .nav-link {
                 padding-left: 1rem;
@@ -24,6 +33,7 @@
             .navbar-nav {
                 background: #0d6efd;
             }
+            #league-select { min-width: 100%; margin: 6px 0; }
         }
         @media (max-width: 576px) {
             .container, .container-fluid {
@@ -47,6 +57,34 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="mainNav">
+                {% if leagues %}
+                {% set league_names = {
+                    'bbl':         'Big Bash League',
+                    'bpl':         'Bangladesh Premier League',
+                    'cpl':         'Caribbean Premier League',
+                    'ilt':         'International League T20',
+                    'ipl':         'Indian Premier League',
+                    'lpl':         'Lanka Premier League',
+                    'mlc':         'Major League Cricket',
+                    'npl':         'Nepal Premier League',
+                    'psl':         'Pakistan Super League',
+                    'sat20':       'SA20',
+                    't20blast':    'Vitality Blast',
+                    'the100':      'The Hundred',
+                    'the100women': "The Hundred Women's",
+                    'wbb':         "Women's Big Bash League",
+                    'wpl':         "Women's Premier League",
+                } %}
+                <select id="league-select" class="form-select form-select-sm ms-2 me-2 my-2 my-lg-0">
+                    {% for key in league_names %}
+                        {% if key in leagues %}
+                        <option value="{{ key }}" {% if league == key %}selected{% endif %}>
+                            {{ league_names[key] }}
+                        </option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                {% endif %}
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
                         <a class="nav-link" href="/">Home</a>
@@ -74,5 +112,17 @@
         {% block content %}{% endblock %}
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    (function() {
+        var sel = document.getElementById('league-select');
+        if (sel) {
+            sel.addEventListener('change', function() {
+                var url = new URL(window.location.href);
+                url.searchParams.set('league', this.value);
+                window.location.href = url.toString();
+            });
+        }
+    })();
+    </script>
 </body>
 </html>

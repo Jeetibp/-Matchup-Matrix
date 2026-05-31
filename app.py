@@ -4,6 +4,9 @@ import os
 import warnings
 import gc
 import sys
+import pickle
+import threading
+from pathlib import Path
 
 # Suppress pandas warnings to reduce memory overhead
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
@@ -33,9 +36,101 @@ LEAGUE_CSVS = {
     'ilt':         'data/all_matches_ilt.csv',
     'lpl':         'data/all_matches_LPL.csv',
     'npl':         'data/all_matches_NPL.csv',
+    'psl':         'data/all_matches_psl.csv',
+    'sat20':       'data/all_matches_sat20.csv',
+    'wbb':         'data/all_matches_wbb.csv',
+    'wpl':         'data/all_matches_wpl.csv',
 }
 
 analytics_cache = {}
+stats_cache = {}        # { (league, func, min_innings, innings_filter): DataFrame }
+PICKLE_CACHE_DIR = Path('data/cache')
+
+# --- Player alias map: league-wise { "global":{...}, "ipl":{...}, ... } ---
+def _load_player_aliases():
+    try:
+        import json
+        p = Path('data/player_aliases.json')
+        if p.exists():
+            with open(p, encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Could not load player aliases: {e}")
+    return {}
+
+PLAYER_ALIASES = _load_player_aliases()
+
+def get_aliases_for_league(league):
+    """Merge global aliases + current league aliases (league overrides global)."""
+    merged = dict(PLAYER_ALIASES.get('global', {}))
+    merged.update(PLAYER_ALIASES.get(league, {}))
+    return merged
+
+# --- Pickle helpers ---
+def _get_pickle_path(league):
+    return PICKLE_CACHE_DIR / f'{league}.pkl'
+
+def _pickle_is_valid(league, csv_path):
+    try:
+        pkl = _get_pickle_path(league)
+        return pkl.exists() and pkl.stat().st_mtime > Path(csv_path).stat().st_mtime
+    except Exception:
+        return False
+
+def _save_to_pickle(league, analytics):
+    try:
+        PICKLE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(_get_pickle_path(league), 'wb') as f:
+            pickle.dump(analytics.df, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print(f"Pickle saved for {league}")
+    except Exception as e:
+        print(f"Pickle save failed for {league}: {e}")
+
+def _load_from_pickle(league):
+    try:
+        with open(_get_pickle_path(league), 'rb') as f:
+            df = pickle.load(f)
+        analytics = CricketAnalytics.__new__(CricketAnalytics)
+        analytics.df = df
+        print(f"Loaded {league} from pickle (fast path)")
+        return analytics
+    except Exception as e:
+        print(f"Pickle load failed for {league}: {e}")
+        return None
+
+# --- Stats result cache ---
+def get_cached_stats(analytics, league, func, min_innings, innings_filter):
+    key = (league, func, min_innings, innings_filter)
+    if key not in stats_cache:
+        if func == 'batting':
+            stats_cache[key] = analytics.get_batting_stats(min_innings, innings_filter=innings_filter)
+        else:
+            stats_cache[key] = analytics.get_bowling_stats(min_innings, innings_filter=innings_filter)
+        print(f"Stats cached: {key}")
+    return stats_cache[key]
+
+# --- Background warmup thread ---
+def _warmup_all_leagues():
+    import time
+    time.sleep(2)  # let app fully start first
+    print("Background warmup starting...")
+    for league_key, csv_path in list(available_leagues().items()):
+        if league_key not in analytics_cache:
+            try:
+                if _pickle_is_valid(league_key, csv_path):
+                    a = _load_from_pickle(league_key)
+                else:
+                    print(f"Warmup full load: {league_key}")
+                    a = CricketAnalytics(csv_path)
+                    _save_to_pickle(league_key, a)
+                if a:
+                    analytics_cache[league_key] = a
+                    print(f"Warmup done: {league_key}")
+            except Exception as e:
+                print(f"Warmup failed for {league_key}: {e}")
+    print("All leagues warmed up.")
+
+threading.Thread(target=_warmup_all_leagues, daemon=True).start()
 
 # CRITICAL FIX: Optimize health checks to prevent unnecessary processing
 @app.before_request
@@ -55,7 +150,7 @@ def available_leagues():
 def get_league():
     """Get current selected league from request or session"""
     avail = available_leagues()
-    league = request.args.get('league') or session.get('league') or 't20blast'
+    league = request.args.get('league') or session.get('league') or 'ipl'
     if league not in avail:
         league = list(avail.keys())[0] if avail else None
     session['league'] = league
@@ -70,11 +165,18 @@ def get_analytics():
             if league in analytics_cache:
                 analytics = analytics_cache[league]
             else:
+                csv_path = avail[league]
                 try:
-                    print(f"Loading cricket analytics for {league}...")
-                    analytics = CricketAnalytics(avail[league])
+                    if _pickle_is_valid(league, csv_path):
+                        print(f"Loading {league} from pickle cache...")
+                        analytics = _load_from_pickle(league)
+                        if analytics is None:
+                            raise Exception("Pickle load returned None, falling back to CSV")
+                    else:
+                        print(f"Loading cricket analytics for {league}...")
+                        analytics = CricketAnalytics(csv_path)
+                        _save_to_pickle(league, analytics)
                     analytics_cache[league] = analytics
-                    # Clear memory after loading
                     gc.collect()
                     print(f"Successfully loaded {league} analytics")
                 except Exception as e:
@@ -114,17 +216,17 @@ def home():
                 error=error
             )
         
-        # Optimize memory by processing data in smaller chunks with error handling
+        # Use stats cache - compute once, reuse on every subsequent request
         try:
             print("Processing batting stats for homepage...")
-            top_bat_all = analytics.get_batting_stats(min_innings=1).head(1)
-            top_bat_1 = analytics.get_batting_stats(min_innings=1, innings_filter=1).head(1)
-            top_bat_2 = analytics.get_batting_stats(min_innings=1, innings_filter=2).head(1)
-            
+            top_bat_all = get_cached_stats(analytics, league, 'batting', 1, None).head(1)
+            top_bat_1   = get_cached_stats(analytics, league, 'batting', 1, 1).head(1)
+            top_bat_2   = get_cached_stats(analytics, league, 'batting', 1, 2).head(1)
+
             print("Processing bowling stats for homepage...")
-            top_bowl_all = analytics.get_bowling_stats(min_innings=1).head(1)
-            top_bowl_1 = analytics.get_bowling_stats(min_innings=1, innings_filter=1).head(1)
-            top_bowl_2 = analytics.get_bowling_stats(min_innings=1, innings_filter=2).head(1)
+            top_bowl_all = get_cached_stats(analytics, league, 'bowling', 1, None).head(1)
+            top_bowl_1   = get_cached_stats(analytics, league, 'bowling', 1, 1).head(1)
+            top_bowl_2   = get_cached_stats(analytics, league, 'bowling', 1, 2).head(1)
             
             # FIXED: Get actual counts instead of DataFrame lengths
             total_players = analytics.df['batsman'].nunique() if hasattr(analytics, 'df') else 0
@@ -182,11 +284,18 @@ def batting():
         leagues = available_leagues()
         min_innings = request.args.get("min_innings", 5, type=int)
         innings_filter = request.args.get("innings_filter", 0, type=int)
+        season = request.args.get("season", "all").strip()
         filter_val = innings_filter if innings_filter in [1,2] else None
+        seasons = []
         
         if analytics:
-            print(f"Processing batting stats: min_innings={min_innings}, filter={filter_val}")
-            stats = analytics.get_batting_stats(min_innings, innings_filter=filter_val)
+            seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
+            if season and season != 'all':
+                filtered = CricketAnalytics.__new__(CricketAnalytics)
+                filtered.df = analytics.df[analytics.df['season'].astype(str) == season].copy()
+                stats = filtered.get_batting_stats(min_innings, innings_filter=filter_val)
+            else:
+                stats = get_cached_stats(analytics, league, 'batting', min_innings, filter_val)
         else:
             stats = []
         
@@ -198,6 +307,8 @@ def batting():
             stats=stats.to_dict("records") if analytics and hasattr(stats, 'to_dict') and not stats.empty else [],
             min_innings=min_innings,
             innings_filter=innings_filter,
+            season=season,
+            seasons=seasons,
             league=league,
             leagues=leagues,
             error=error
@@ -209,6 +320,8 @@ def batting():
             stats=[],
             min_innings=5,
             innings_filter=0,
+            season='all',
+            seasons=[],
             league=None,
             leagues=available_leagues(),
             error=f"Error loading batting stats: {str(e)}"
@@ -222,11 +335,18 @@ def bowling():
         leagues = available_leagues()
         min_innings = request.args.get("min_innings", 3, type=int)
         innings_filter = request.args.get("innings_filter", 0, type=int)
+        season = request.args.get("season", "all").strip()
         filter_val = innings_filter if innings_filter in [1,2] else None
+        seasons = []
         
         if analytics:
-            print(f"Processing bowling stats: min_innings={min_innings}, filter={filter_val}")
-            stats = analytics.get_bowling_stats(min_innings, innings_filter=filter_val)
+            seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
+            if season and season != 'all':
+                filtered = CricketAnalytics.__new__(CricketAnalytics)
+                filtered.df = analytics.df[analytics.df['season'].astype(str) == season].copy()
+                stats = filtered.get_bowling_stats(min_innings, innings_filter=filter_val)
+            else:
+                stats = get_cached_stats(analytics, league, 'bowling', min_innings, filter_val)
         else:
             stats = []
         
@@ -238,6 +358,8 @@ def bowling():
             stats=stats.to_dict("records") if analytics and hasattr(stats, 'to_dict') and not stats.empty else [],
             min_innings=min_innings,
             innings_filter=innings_filter,
+            season=season,
+            seasons=seasons,
             league=league,
             leagues=leagues,
             error=error
@@ -249,6 +371,8 @@ def bowling():
             stats=[],
             min_innings=3,
             innings_filter=0,
+            season='all',
+            seasons=[],
             league=None,
             leagues=available_leagues(),
             error=f"Error loading bowling stats: {str(e)}"
@@ -404,7 +528,32 @@ def api_player_fuzzy():
                 players = bowlers + batsmen
                 
         players = sorted(set(players))
-        results = [p for p in players if q in p.lower()]
+
+        # Build search terms: alias map + multi-word first-initial expansion
+        terms = set()
+        terms.add(q)
+
+        # 1. Check alias map (global + league-specific): "virat" -> "V Kohli"
+        league_aliases = get_aliases_for_league(league)
+        alias_match = league_aliases.get(q)
+        if alias_match:
+            terms.add(alias_match.lower())
+
+        # 2. Multi-word: "virat kohli" -> also try "v kohli" and "kohli"
+        words = q.split()
+        if len(words) >= 2:
+            terms.add(words[0][0] + ' ' + ' '.join(words[1:]))
+            terms.add(words[-1])
+            # also check alias for the full multi-word query (already done above)
+
+        seen = set()
+        results = []
+        for p in players:
+            pl = p.lower()
+            if any(t in pl for t in terms) and p not in seen:
+                seen.add(p)
+                results.append(p)
+
         return jsonify({'players': results[:20]})
     except Exception as e:
         print(f"Error in player_fuzzy API: {e}")
@@ -449,26 +598,43 @@ def api_player_stats():
             return jsonify({'error': 'No data loaded.'})
         name = request.args.get('name', '').strip()
         ptype = request.args.get('ptype', 'batsman')
+        season = request.args.get('season', '').strip()
         if not name:
             return jsonify({'error': 'No player name specified.'})
+        # Resolve alias: "Virat Kohli" -> "V Kohli" (global + league-specific)
+        league_aliases = get_aliases_for_league(league)
+        alias = league_aliases.get(name.lower())
+        if alias:
+            name = alias
         try:
+            # Apply season filter — creates a lightweight filtered view, no function changes needed
+            if season and season != 'all':
+                filtered = CricketAnalytics.__new__(CricketAnalytics)
+                filtered.df = analytics.df[analytics.df['season'].astype(str) == season].copy()
+                work = filtered
+                work_df = filtered.df
+            else:
+                work = analytics
+                work_df = analytics.df
+
             if ptype == 'batsman':
-                stats = analytics.get_batting_stats(min_innings=0)
+                stats = work.get_batting_stats(min_innings=0)
                 stats['batsman'] = stats['batsman'].astype(str)
                 player = stats[stats['batsman'].str.lower() == name.lower()]
                 if player.empty:
                     return jsonify({'error': 'Batsman not found.'})
                 rec = player.iloc[0]
                 balls = int(rec['balls'])
-                dismissals = analytics.df[(analytics.df['batsman'].str.lower() == name.lower()) & (analytics.df['player_dismissed'] == name)].shape[0]
+                dismissals = work_df[(work_df['batsman'].str.lower() == name.lower()) & (work_df['player_dismissed'] == name)].shape[0]
                 bpd = round(balls / dismissals, 2) if dismissals else "-"
-                fours = int(analytics.df[analytics.df['batsman'].str.lower() == name.lower()]['isFour'].sum())
-                sixes = int(analytics.df[analytics.df['batsman'].str.lower() == name.lower()]['isSix'].sum())
+                fours = int(work_df[work_df['batsman'].str.lower() == name.lower()]['isFour'].sum())
+                sixes = int(work_df[work_df['batsman'].str.lower() == name.lower()]['isSix'].sum())
                 bpb = round(balls / (fours + sixes), 2) if (fours + sixes) else "-"
                 rpi_all = float(rec['RPI'])
                 rpi_1 = float(rec.get('RPI_1', 0))
                 rpi_2 = float(rec.get('RPI_2', 0))
                 response = {
+                    'resolved_name': name,
                     'matches': int(rec['innings']),
                     'runs': int(rec['runs']),
                     'avg': float(round(rec['runs']/rec['innings'],2)) if rec['innings']>0 else "-",
@@ -484,7 +650,7 @@ def api_player_stats():
                     'bpb': bpb,
                 }
             else:
-                stats = analytics.get_bowling_stats(min_innings=0)
+                stats = work.get_bowling_stats(min_innings=0)
                 stats['bowler'] = stats['bowler'].astype(str)
                 player = stats[stats['bowler'].str.lower() == name.lower()]
                 if player.empty:
@@ -493,11 +659,12 @@ def api_player_stats():
                 balls = int(rec['balls'])
                 wickets = int(rec['wickets'])
                 sr = round(balls / wickets, 2) if wickets else "-"
-                df_player = analytics.df[analytics.df['bowler'].str.lower() == name.lower()]
+                df_player = work_df[work_df['bowler'].str.lower() == name.lower()]
                 fours_conc = int(df_player['isFour'].sum())
                 sixes_conc = int(df_player['isSix'].sum())
                 bpb = round(balls / (fours_conc + sixes_conc), 2) if (fours_conc + sixes_conc) else "-"
                 response = {
+                    'resolved_name': name,
                     'matches': int(rec['innings']),
                     'wickets': wickets,
                     'avg': float(rec.get('AVG', 0)),
@@ -516,6 +683,22 @@ def api_player_stats():
     except Exception as e:
         print(f"Error in player_stats API: {e}")
         return jsonify({'error': f'System error: {str(e)}'})
+
+@app.route('/api/get_seasons')
+def api_get_seasons():
+    """API endpoint to get available seasons for the selected league"""
+    try:
+        analytics, league, error = get_analytics()
+        if not analytics:
+            return jsonify({'seasons': []})
+        seasons = sorted(
+            analytics.df['season'].dropna().astype(str).unique().tolist(),
+            reverse=True
+        )
+        return jsonify({'seasons': seasons})
+    except Exception as e:
+        print(f"Error in get_seasons API: {e}")
+        return jsonify({'seasons': [], 'error': str(e)})
 
 @app.route("/venuestats", methods=["GET"])
 def venuestats():
