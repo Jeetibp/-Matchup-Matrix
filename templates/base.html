@@ -99,7 +99,16 @@
                         <a class="nav-link" href="/headtohead{% if league %}?league={{ league }}{% endif %}">Head-to-Head</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/teamvsteam{% if league %}?league={{ league }}{% endif %}">Team vs Team</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/venuestats">Venue Stats</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/phasestats">Phase Analysis</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/winpatterns{% if league %}?league={{ league }}{% endif %}">Win Patterns</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('user_guide') }}">User Guide</a>

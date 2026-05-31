@@ -9,52 +9,59 @@
 
       <h4>1. Getting Started</h4>
       <ul>
-        <li><b>Open the app</b> in your browser. Select your preferred league (e.g. T20BLAST, IPL, MCL, THE100, CPL, THE100Women).</li>
-        <li>The dashboard auto-refreshes to show stats for your selected league.</li>
+        <li><b>Pick a league</b> from the dropdown in the top navbar. Supported competitions include IPL, BBL, BPL, CPL, ILT20, LPL, MLC, NPL, PSL, SA20, T20 Blast, The Hundred (M/W), WBBL and WPL — whichever data files are available.</li>
+        <li>The dashboard reloads automatically and remembers your selection across pages.</li>
+        <li>On phones, tap the navbar toggler to access Home, Batting, Bowling, Head-to-Head, Venue Stats, Phase Analysis and the User Guide. Wide tables scroll horizontally and the player/bowler name column stays pinned.</li>
       </ul>
       <hr>
 
       <h4>2. Main Features</h4>
       <ul>
-        <li><b>Player Database & Quick Search</b>: Instantly search for any batsman or bowler. See their latest stats card in one click.</li>
-        <li><b>Batting/Bowling Statistics</b>: Leaderboards and in-depth tables. Filter by minimum innings and innings type.</li>
-        <li><b>Head-to-Head Analysis</b>: Compare any batsman/bowler or run group matchup analysis.</li>
+        <li><b>Home – Player Database & Quick Search</b>: Type any player name (full name, surname or alias like "Virat Kohli" → "V Kohli"). Filter by one or more seasons and by venue, then get a full stats card for that player.</li>
+        <li><b>Batting Leaderboard</b>: Full league leaderboard with Matches, Balls, Runs, Avg, SR, 100s, 50s, HS, RPI, Dot%, BPD and BPB. Filter by minimum innings, innings (All / 1st / 2nd) and any subset of seasons.</li>
+        <li><b>Bowling Leaderboard</b>: Full leaderboard with Matches, Balls, Runs, Wickets, Avg, Eco, SR, Best, 5W+, Dot% and BPB. Same filter set as Batting.</li>
+        <li><b>Head-to-Head</b>: Single matchup or bulk matchup grids between any bowler(s) and batsman(s), with optional innings and venue scoping.</li>
+        <li><b>Venue Stats</b>: Per-venue averages, win/loss splits, bat-first vs chase win %, biggest totals, lowest totals, highest successful chase and a per-team breakdown. Multi-season filter supported.</li>
+        <li><b>Phase Analysis</b>: Powerplay/middle/death breakdowns (PP1 overs 1–6, PP2 7–10, PP3 11–15, PP4 16–20) including overall phase averages, win-vs-loss split, batting-1st-vs-2nd split with innings counts, per-team breakdown and recent matches.</li>
       </ul>
       <hr>
 
       <h4>3. Player Stats Explained</h4>
-      <b>Batsman Quick Stats:</b>
+      <b>Batsman Quick Stats (Home card) & Batting Leaderboard:</b>
       <ul>
-        <li><b>Matches</b>: Total matches played</li>
+        <li><b>Matches / Innings</b>: Number of matches the player batted in</li>
+        <li><b>Balls</b>: Total balls faced</li>
         <li><b>Runs</b>: Total runs scored</li>
-        <li><b>Average</b>: Runs per dismissal (Runs / Times Out)</li>
-        <li><b>Strike Rate</b>: (Runs / Balls) × 100</li>
+        <li><b>Average (Avg)</b>: Runs per innings (Runs / Innings) — matches the Home card "Average"</li>
+        <li><b>Strike Rate (SR)</b>: (Runs / Balls) × 100</li>
         <li><b>100s / 50s</b>: Centuries / Fifties scored</li>
-        <li><b>Highest Score</b>: Top runs in a single match</li>
-        <li><b>RPI (All/1st/2nd)</b>: Runs per innings for all, 1st, and 2nd innings</li>
+        <li><b>Highest Score (HS)</b>: Top runs in a single match</li>
+        <li><b>RPI (All / 1st / 2nd)</b>: Runs per innings split — overall, batting 1st only, batting 2nd only (shown on the Home card)</li>
         <li><b>Dot %</b>: % of balls faced scoring zero</li>
-        <li><b>BPB (Balls Per Boundary)</b>: <span class="text-primary">Balls faced / (Fours + Sixes)</span>. How often a batsman hits a boundary (lower = better).</li>
-        <li><b>BPD (Balls Per Dismissal)</b>: <span class="text-primary">Balls faced / Times out</span>. How long a batsman survives before getting out (higher = better).</li>
+        <li><b>BPD (Balls Per Dismissal)</b>: Balls faced / Times out — survival metric (higher = better)</li>
+        <li><b>BPB (Balls Per Boundary)</b>: Balls faced / (Fours + Sixes) — boundary frequency (lower = better)</li>
       </ul>
-      <b>Bowler Quick Stats:</b>
+      <b>Bowler Quick Stats (Home card) & Bowling Leaderboard:</b>
       <ul>
-        <li><b>Matches</b>: Total matches bowled</li>
-        <li><b>Wickets</b>: Total wickets taken</li>
+        <li><b>Matches / Innings</b>: Matches bowled in</li>
+        <li><b>Balls</b>: Total legal deliveries</li>
+        <li><b>Runs</b>: Runs conceded</li>
+        <li><b>Wickets</b>: Total wickets (excluding run-outs and retirements)</li>
         <li><b>Avg</b>: Runs conceded per wicket (lower = better)</li>
-        <li><b>Eco</b>: Economy rate (Runs per over, lower = better)</li>
-        <li><b>SR</b>: <span class="text-primary">Balls bowled / Wickets</span>. Average balls per wicket (lower = better)</li>
-        <li><b>Wkts (1st/2nd)</b>: Wickets in 1st and 2nd innings</li>
+        <li><b>Eco</b>: Economy rate, runs per over (lower = better)</li>
+        <li><b>SR</b>: Balls bowled / Wickets (lower = better)</li>
+        <li><b>Wkts (1st / 2nd)</b>: Innings-wise wicket split (Home card only)</li>
         <li><b>Best</b>: Most wickets in a single match</li>
-        <li><b>5W+</b>: Times bowler took 5+ wickets in a match</li>
-        <li><b>Dot %</b>: % of dot balls (no run balls)</li>
-        <li><b>BPB (Balls Per Boundary Conceded)</b>: <span class="text-primary">Balls Bowled / (Fours + Sixes Conceded)</span>. How often a bowler is hit for a boundary (higher = better).</li>
+        <li><b>5W+</b>: Times the bowler took 5 or more wickets in a match</li>
+        <li><b>Dot %</b>: % of dot balls</li>
+        <li><b>BPB</b>: Balls bowled / (Fours + Sixes conceded) — boundary protection (higher = better)</li>
       </ul>
       <hr>
 
       <h4>4. Head-to-Head Matchup Analysis</h4>
       <p>
-        <b>What is Head-to-Head?</b> Compare any bowler and batsman’s real historical encounters ball-by-ball.<br>
-        <b>How to Use:</b> Select bowler, batsman (or groups), and innings type. See stats like balls faced, runs, wickets, strike rate, economy, dot percentage, matches played, and if the batsman was ever dismissed by this bowler.
+        <b>What is Head-to-Head?</b> Compare any bowler and batsman's real historical encounters ball-by-ball.<br>
+        <b>How to Use:</b> Pick a single bowler/batsman, or load multiple of each for a matchup grid. Use the global innings filter (All / 1st / 2nd) and optionally restrict to one venue. Reset all inputs with the orange Reset button.
       </p>
       <ul>
         <li><b>Balls</b>: Balls faced in this matchup</li>
@@ -62,28 +69,71 @@
         <li><b>Wickets</b>: Number of dismissals</li>
         <li><b>Dot Balls</b>: Balls with zero runs</li>
         <li><b>Strike Rate</b>: Batting SR in the matchup</li>
-        <li><b>Economy</b>: Bowler’s runs per over in matchup</li>
+        <li><b>Economy</b>: Bowler's runs per over in matchup</li>
         <li><b>Dot %</b>: % of dot balls</li>
-        <li><b>Matches</b>: Matches in which this occurred</li>
-        <li><b>Status</b>: “Yes” if batsman dismissed by this bowler, “No” otherwise</li>
+        <li><b>Matches</b>: Matches in which this matchup occurred</li>
+        <li><b>Status</b>: "Found" if balls exist between the pair, otherwise "No Match"</li>
       </ul>
       <div class="alert alert-info mt-3">
-        <b>Venue Head-to-Head Analysis:</b><br>
-        <span>
-          You can also perform head-to-head analysis for a specific venue. Simply select a venue and then choose your bowler and batsman. The app will show their matchup stats <b>only for matches played at that venue</b>. This is useful to see if a player or matchup performs differently at different grounds.
-        </span>
+        <b>Venue Head-to-Head:</b>
+        Choose a venue (canonical names are auto-normalised across spelling variants) and the matchup stats restrict to that ground only — useful for spotting venue-specific matchup edges.
       </div>
       <hr>
 
-      <h4>5. Filters, Sorting, and Navigation</h4>
+      <h4>5. Venue Stats Page</h4>
       <ul>
-        <li><b>Minimum Innings</b>: Show only players with at least this many innings</li>
-        <li><b>Innings Filter</b>: View all, 1st, or 2nd innings stats</li>
-        <li><b>League Selector</b>: Instantly switch between different T20 leagues</li>
+        <li><b>Multi-season filter</b>: Pick any subset of seasons via the dropdown checkboxes.</li>
+        <li><b>Averages</b>: 1st-innings average, 2nd-innings average, completed-match count.</li>
+        <li><b>Win split</b>: Bat-First Win % vs Chase Win % (over matches where both innings completed).</li>
+        <li><b>High / Low scores</b>: Matches with any innings 180+ ("High Scores") or under 150 ("Low Scores").</li>
+        <li><b>Record cards</b>: Highest team total, lowest team total (≥50), highest successful chase at the venue.</li>
+        <li><b>Per-team breakdown</b>: Matches, total runs, average per innings, HS, LS and wins for each team at the venue.</li>
       </ul>
       <hr>
 
-      <h4>6. Advanced Metric Glossary</h4>
+      <h4>6. Phase Analysis Page</h4>
+      <ul>
+        <li><b>Phases</b>: PP1 (overs 1–6), PP2 (7–10), PP3 (11–15), PP4 (16–20). Colour-coded red/yellow/orange/green throughout.</li>
+        <li><b>Overall phase averages</b>: Avg runs and wickets per phase across all innings in the filter.</li>
+        <li><b>Win-vs-Loss</b> table (when a team is selected): Average phase runs in their wins vs losses.</li>
+        <li><b>Batting 1st vs 2nd</b> table: Phase averages split by innings, with innings counts so small samples are visible.</li>
+        <li><b>Per-team breakdown</b> (when no team is selected): Average phase runs for every team.</li>
+        <li><b>Recent matches</b>: Phase-by-phase scoreline for the latest matches in scope.</li>
+        <li><b>Phase Specialists</b>: Top 10 batters (by Strike Rate) and bowlers (by Economy) for each phase — Powerplay, Middle 1, Middle 2, Death. Min 15 balls (batters) / 30 balls (bowlers) in the phase to qualify, so you only see real specialists, not lucky cameos.</li>
+      </ul>
+      <hr>
+
+      <h4>6a. Team vs Team Page</h4>
+      <ul>
+        <li>Pick <b>Team A</b> and <b>Team B</b> (optionally a venue, innings or season filter).</li>
+        <li><b>Overall H2H</b>: Matches, wins for each side, win %, no-results and average score per team.</li>
+        <li><b>Venue H2H</b>: Per-venue matches and wins between the two teams.</li>
+        <li><b>Last 5 Matches</b>: Most recent meetings with both scorelines, winner and margin.</li>
+        <li><b>Top Run Scorers / Top Wicket Takers</b>: Best individual performers across all fixtures between the two teams.</li>
+      </ul>
+      <hr>
+
+      <h4>6b. Win Patterns Page</h4>
+      <ul>
+        <li>Pick a team (optionally a venue or seasons).</li>
+        <li><b>Highlight cards</b>: Win % when scoring 180+ batting first, 200+ batting first, and chasing 180+.</li>
+        <li><b>Score Buckets — Batting 1st</b>: Win rate by total posted (&lt;120, 120-149, 150-179, 180-199, 200+).</li>
+        <li><b>Chase Targets</b>: Win rate by target faced (same buckets) — useful for fantasy and toss-decision insight.</li>
+      </ul>
+      <hr>
+
+      <h4>7. Filters, Sorting, and Navigation</h4>
+      <ul>
+        <li><b>Minimum Innings</b>: Hide players below the threshold on Batting/Bowling pages.</li>
+        <li><b>Innings Filter</b>: All / 1st / 2nd — works on Batting, Bowling, Head-to-Head.</li>
+        <li><b>Season Filter (multi-select)</b>: Available on Home, Batting, Bowling, Venue Stats and Phase Analysis. Tick any combination; the button shows "All Seasons", the season name, or "<i>N</i> seasons".</li>
+        <li><b>Venue Filter</b>: On Home and Head-to-Head; canonical venue names map across spelling variants.</li>
+        <li><b>Clear All</b>: Yellow Clear button on filter dropdowns resets selections.</li>
+        <li><b>League Selector</b>: Top-right navbar — switch leagues without losing the current page.</li>
+      </ul>
+      <hr>
+
+      <h4>8. Advanced Metric Glossary</h4>
       <div class="table-responsive">
       <table class="table table-bordered table-sm">
         <thead class="table-light"><tr>
@@ -92,32 +142,38 @@
           <th>Meaning</th>
         </tr></thead>
         <tbody>
-        <tr><td>BPB</td><td>Balls / (Fours + Sixes)</td><td>Boundary frequency. Lower for frequent hitters/boundary-givers.</td></tr>
-        <tr><td>BPD</td><td>Balls / Times Dismissed</td><td>Batsman’s survival. Higher is better.</td></tr>
+        <tr><td>Average (Bat)</td><td>Runs / Innings</td><td>Runs per innings (used on Home card and Batting leaderboard).</td></tr>
         <tr><td>SR (Bat)</td><td>(Runs / Balls) × 100</td><td>How quickly a batsman scores.</td></tr>
-        <tr><td>SR (Bowl)</td><td>Balls / Wickets</td><td>How quickly a bowler takes wickets. Lower is better.</td></tr>
-        <tr><td>Dot %</td><td>(Dot Balls / Balls) × 100</td><td>Percentage of dot balls (no runs).</td></tr>
-        <tr><td>Economy</td><td>Runs / (Balls / 6)</td><td>Runs conceded per over (bowler).</td></tr>
-        <tr><td>Average</td><td>Runs / Outs (bat); Runs Conceded / Wickets (bowl)</td><td>Bat: typical runs per out. Bowl: typical runs per wicket.</td></tr>
-        <tr><td>RPI</td><td>Runs / Innings</td><td>Runs per innings (consistency metric).</td></tr>
+        <tr><td>RPI</td><td>Runs / Innings</td><td>Same idea as Average; shown split by 1st/2nd innings on the Home card.</td></tr>
+        <tr><td>BPB (Bat)</td><td>Balls / (Fours + Sixes)</td><td>Boundary frequency; lower = more aggressive hitter.</td></tr>
+        <tr><td>BPD</td><td>Balls / Times Dismissed</td><td>Batsman's survival; higher = better.</td></tr>
+        <tr><td>Dot %</td><td>(Dot Balls / Balls) × 100</td><td>Share of scoreless balls.</td></tr>
+        <tr><td>Average (Bowl)</td><td>Runs Conceded / Wickets</td><td>Typical runs per wicket; lower = better.</td></tr>
+        <tr><td>Economy</td><td>Runs / (Balls / 6)</td><td>Runs conceded per over.</td></tr>
+        <tr><td>SR (Bowl)</td><td>Balls / Wickets</td><td>How quickly a bowler takes wickets; lower = better.</td></tr>
+        <tr><td>BPB (Bowl)</td><td>Balls / (Fours + Sixes Conceded)</td><td>Boundary protection; higher = better.</td></tr>
+        <tr><td>5W+</td><td>count of matches with ≥5 wkts</td><td>Standout bowling performances.</td></tr>
         </tbody>
       </table>
       </div>
       <hr>
 
-      <h4>7. Tips & Best Practices</h4>
+      <h4>9. Tips & Best Practices</h4>
       <ul>
-        <li>Use BPB to spot power hitters or bowlers who concede many boundaries.</li>
-        <li>Compare “Dot %” to find tight, disciplined bowlers or patient batsmen.</li>
-        <li>“Head-to-Head” uncovers hidden matchups (e.g., a bowler who consistently dismisses a big-name batsman).</li>
+        <li>Use multi-season filters to compare a player's form across specific years rather than career totals.</li>
+        <li>On Venue Stats, compare Bat-First vs Chase Win % to gauge whether tosses matter at a ground.</li>
+        <li>On Phase Analysis, the Win-vs-Loss table reveals where a team typically gains or loses matches (e.g. death overs).</li>
+        <li>BPB highlights power hitters (low value) and boundary-conceding bowlers (low value = bad).</li>
+        <li>"Head-to-Head" uncovers hidden edges — e.g. a bowler who consistently dismisses a big-name batsman.</li>
       </ul>
       <hr>
 
-      <h4>8. FAQ & Troubleshooting</h4>
+      <h4>10. FAQ & Troubleshooting</h4>
       <ul>
-        <li><b>No Data:</b> Try changing filters or check your league selection.</li>
-        <li><b>Player Not Found:</b> Use partial names or alternate spellings.</li>
-        <li><b>Stats Missing:</b> Some advanced stats require enough matches or balls to be meaningful.</li>
+        <li><b>Empty table after picking 1st/2nd Innings:</b> Lower the Minimum Innings — only players with that many innings in the chosen innings are shown.</li>
+        <li><b>Player not found:</b> Try a surname or partial name; aliases like full names usually resolve.</li>
+        <li><b>Season list looks short:</b> Some leagues only have a few completed seasons in the dataset.</li>
+        <li><b>Stats look thin:</b> Some advanced stats need enough balls/innings to be meaningful — raise the threshold.</li>
       </ul>
 
       <h5 class="mt-4">Enjoy discovering the depth of cricket analytics!<br>

@@ -76,8 +76,9 @@ table.table, table.table tbody tr, table.table thead th {
     font-size: 1rem;
   }
   .table, .table th, .table td {
-    font-size: 13px;
-    padding: 0.3rem 0.5rem;
+    font-size: 12px;
+    padding: 0.3rem 0.4rem;
+    white-space: nowrap;
   }
   .form-control, .form-select, .btn {
     font-size: 14px;
@@ -89,6 +90,33 @@ table.table, table.table tbody tr, table.table thead th {
     padding-left: 6px !important;
     padding-right: 6px !important;
   }
+  /* Smooth horizontal scrolling for wide tables */
+  .table-responsive {
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 6px;
+  }
+  /* Sticky first column for player/leaderboard tables */
+  .table-sticky-col thead th:first-child,
+  .table-sticky-col tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background-color: #fff;
+    box-shadow: 2px 0 4px -2px rgba(0,0,0,0.15);
+  }
+  .table-sticky-col thead th:first-child {
+    background-color: #212529;
+    color: #fff;
+    z-index: 3;
+  }
+  /* Form rows wrap nicely */
+  form.row > [class*="col-"] {
+    margin-bottom: 0.4rem;
+  }
+  /* Stack btn-groups */
+  .btn-group { flex-wrap: wrap; }
+  .btn-group > .btn { flex: 1 1 auto; }
 }
 
 /* Optional: Make buttons easier to tap on mobile */
@@ -96,4 +124,16 @@ table.table, table.table tbody tr, table.table thead th {
   .btn, .form-control, .form-select {
     min-height: 38px;
   }
+  /* Larger tap targets for dropdown items (season checkboxes) */
+  .dropdown-menu .dropdown-item { padding: 0.5rem 0.75rem; }
+  .dropdown-menu .form-check-input { width: 1.1em; height: 1.1em; }
+}
+
+/* Tablet tweaks */
+@media (min-width: 577px) and (max-width: 991.98px) {
+  .table, .table th, .table td {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .table-responsive { -webkit-overflow-scrolling: touch; }
 }

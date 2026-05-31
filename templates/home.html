@@ -19,9 +19,12 @@
                 </select>
             </div>
             <div class="col-md-2 col-6 mb-2 mb-md-0">
-                <select id="season-filter" class="form-select">
-                    <option value="all">All Seasons</option>
-                </select>
+                <div class="dropdown w-100">
+                    <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">All Seasons</button>
+                    <ul class="dropdown-menu p-2" id="season-dd-menu" style="max-height:300px;overflow-y:auto;min-width:100%">
+                        <li class="mb-1"><button type="button" class="btn btn-sm btn-outline-secondary w-100" id="season-clear-btn">Clear All</button></li>
+                    </ul>
+                </div>
             </div>
             <div class="col-md-3 col-12 mb-2 mb-md-0">
                 <select id="venue-filter" class="form-select">
@@ -53,6 +56,17 @@
     'the100women': 'The Hundred (Women)'
 } %}
 <h1 class="mb-4">{{ league_names.get(league, league|upper) }} Analytics Dashboard</h1>
+
+<div class="row g-2 mb-4">
+  <div class="col-6 col-md-3"><a href="/batting{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-primary w-100">🏏 Batting</a></div>
+  <div class="col-6 col-md-3"><a href="/bowling{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-primary w-100">🎯 Bowling</a></div>
+  <div class="col-6 col-md-3"><a href="/headtohead{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-primary w-100">⚔️ Head-to-Head</a></div>
+  <div class="col-6 col-md-3"><a href="/teamvsteam{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-primary w-100">🆚 Team vs Team</a></div>
+  <div class="col-6 col-md-3"><a href="/venuestats{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-secondary w-100">🏟 Venue Stats</a></div>
+  <div class="col-6 col-md-3"><a href="/phasestats{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-secondary w-100">⏱ Phase Analysis</a></div>
+  <div class="col-6 col-md-3"><a href="/winpatterns{% if league %}?league={{ league }}{% endif %}" class="btn btn-outline-success w-100">📈 Win Patterns</a></div>
+  <div class="col-6 col-md-3"><a href="/user_guide" class="btn btn-outline-dark w-100">📖 User Guide</a></div>
+</div>
 
 <style>
 .suggestions-dropdown {
@@ -118,22 +132,42 @@ document.addEventListener('click', e=>{
     if (!e.target.closest('#player-search-input')) suggestionBox.style.display='none';
 });
 
-// Load seasons for selected league
+// Load seasons for selected league (multi-select dropdown)
+function syncSeasonBtn() {
+    const cbs = document.querySelectorAll('.season-cb');
+    const selected = Array.from(cbs).filter(c => c.checked).map(c => c.value);
+    const btn = document.getElementById('season-dd-btn');
+    if (btn) {
+        btn.textContent = selected.length === 0 ? 'All Seasons'
+            : (selected.length === 1 ? selected[0] : `${selected.length} seasons`);
+    }
+    return selected;
+}
+function getSelectedSeasons() {
+    return Array.from(document.querySelectorAll('.season-cb')).filter(c => c.checked).map(c => c.value);
+}
 function loadSeasons(leagueVal) {
     fetch(`/api/get_seasons?league=${encodeURIComponent(leagueVal)}`)
         .then(r => r.json())
         .then(data => {
-            const sel = document.getElementById('season-filter');
-            const prev = sel.value;
-            sel.innerHTML = '<option value="all">All Seasons</option>';
+            const menu = document.getElementById('season-dd-menu');
+            // Preserve clear-all button (first <li>), wipe the rest
+            const firstLi = menu.querySelector('li');
+            menu.innerHTML = '';
+            menu.appendChild(firstLi);
             (data.seasons || []).forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s; opt.textContent = s;
-                if (s === prev) opt.selected = true;
-                sel.appendChild(opt);
+                const li = document.createElement('li');
+                li.innerHTML = `<label class="dropdown-item d-flex align-items-center" style="cursor:pointer"><input type="checkbox" class="form-check-input me-2 season-cb" value="${s}">${s}</label>`;
+                menu.appendChild(li);
             });
+            menu.querySelectorAll('.season-cb').forEach(cb => cb.addEventListener('change', syncSeasonBtn));
+            syncSeasonBtn();
         }).catch(() => {});
 }
+document.getElementById('season-clear-btn').addEventListener('click', function() {
+    document.querySelectorAll('.season-cb').forEach(cb => cb.checked = false);
+    syncSeasonBtn();
+});
 
 // Load venues for selected league
 function loadVenues(leagueVal) {
@@ -173,13 +207,14 @@ document.getElementById('player-search-form').addEventListener('submit', functio
     const league = document.getElementById('league-select').value;
     if (!name) return;
     const ptype = document.getElementById('player-type').value;
-    const season = document.getElementById('season-filter').value;
+    const selectedSeasons = getSelectedSeasons();
     const venue = document.getElementById('venue-filter').value;
-    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}&season=${encodeURIComponent(season)}&venue=${encodeURIComponent(venue)}`)
+    const seasonParams = selectedSeasons.map(s => `&season=${encodeURIComponent(s)}`).join('');
+    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}${seasonParams}&venue=${encodeURIComponent(venue)}`)
       .then(r=>r.json())
       .then(data=>{
         let html = '';
-        const seasonLabel = (season && season !== 'all') ? `<span class="badge bg-secondary ms-2">Season: ${season}</span>` : '';
+        const seasonLabel = (selectedSeasons.length > 0) ? `<span class="badge bg-secondary ms-2">Season${selectedSeasons.length > 1 ? 's' : ''}: ${selectedSeasons.join(', ')}</span>` : '';
         const venueLabel = (venue && venue !== 'all') ? `<span class="badge bg-info text-dark ms-2" title="${venue}">📍 ${venue.length > 30 ? venue.substring(0,30)+'…' : venue}</span>` : '';
         if (data.error) { html = `<div class='alert alert-danger'>${data.error}</div>`; }
         else if (ptype==='batsman') {
@@ -251,6 +286,8 @@ function closePlayerStats() {
     document.getElementById('player-search-input').value = '';
     document.getElementById('player-suggestions').style.display = 'none';
     document.getElementById('venue-filter').value = 'all';
+    document.querySelectorAll('.season-cb').forEach(cb => cb.checked = false);
+    syncSeasonBtn();
     refreshBtn.style.display = "none";
 }
 refreshBtn.onclick = closePlayerStats;

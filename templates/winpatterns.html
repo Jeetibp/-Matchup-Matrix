@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mt-3 mb-3">📈 Winning Pattern Analysis</h2>
+<p class="text-muted small">When a team posts or chases a given score range, how often do they win?</p>
+
+{% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
+
+<form class="row gy-2 gx-3 align-items-end mb-4" method="get">
+  <div class="col-md-4 col-12">
+    <label class="form-label small mb-1">Team</label>
+    <select name="team" class="form-select" required>
+      <option value="">-- Choose Team --</option>
+      {% for t in teams %}<option value="{{ t }}" {% if t==selected_team %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3 col-12">
+    <label class="form-label small mb-1">Venue</label>
+    <select name="venue" class="form-select">
+      <option value="">All Venues</option>
+      {% for v in venues %}<option value="{{ v }}" {% if v==selected_venue %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 col-12">
+    <label class="form-label small mb-1">Seasons</label>
+    <div class="dropdown w-100">
+      <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        {% if not selected_seasons %}All Seasons{% elif selected_seasons|length == 1 %}{{ selected_seasons[0] }}{% else %}{{ selected_seasons|length }} seasons{% endif %}
+      </button>
+      <ul class="dropdown-menu p-2" style="max-height:300px;overflow-y:auto;min-width:100%">
+        <li class="mb-1"><button type="button" class="btn btn-sm btn-outline-secondary w-100" id="season-clear-btn">Clear All</button></li>
+        {% for s in seasons %}
+        <li><label class="dropdown-item d-flex align-items-center" style="cursor:pointer">
+          <input type="checkbox" class="form-check-input me-2 season-cb" value="{{ s }}" {% if s in selected_seasons %}checked{% endif %}>{{ s }}
+        </label></li>
+        {% endfor %}
+      </ul>
+      <div id="season-hidden-container">
+        {% for s in selected_seasons %}<input type="hidden" name="season" value="{{ s }}">{% endfor %}
+      </div>
+    </div>
+  </div>
+  <input type="hidden" name="league" value="{{ league }}">
+  <div class="col-md-2 col-6"><button class="btn btn-primary w-100" type="submit">Analyze</button></div>
+  <div class="col-md-1 col-6"><a class="btn btn-warning w-100 fw-bold" href="/winpatterns{% if league %}?league={{ league }}{% endif %}">Clear</a></div>
+</form>
+
+{% if result %}
+<div class="card mb-3">
+  <div class="card-header bg-primary text-white"><strong>{{ result.team }} — Overall</strong>{% if result.venue %} <small>@ {{ result.venue }}</small>{% endif %}</div>
+  <div class="card-body">
+    <div class="row text-center g-2">
+      <div class="col-4"><div class="border rounded p-2"><div class="text-muted small">Matches</div><div class="h4 mb-0">{{ result.matches_played }}</div></div></div>
+      <div class="col-4"><div class="border rounded p-2 bg-success bg-opacity-10"><div class="text-muted small">Wins</div><div class="h4 mb-0">{{ result.wins_overall }}</div></div></div>
+      <div class="col-4"><div class="border rounded p-2"><div class="text-muted small">Win %</div><div class="h4 mb-0">{{ result.win_pct_overall }}%</div></div></div>
+    </div>
+  </div>
+</div>
+
+{% set h = result.highlights %}
+<div class="row g-2 mb-3">
+  <div class="col-md-4 col-12">
+    <div class="card border-success">
+      <div class="card-body text-center">
+        <div class="text-success fw-bold">When scoring 180+ batting first</div>
+        <div class="display-6">{{ h.bat_180_plus.win_pct }}%</div>
+        <div class="text-muted">Win rate ({{ h.bat_180_plus.wins }}/{{ h.bat_180_plus.matches }})</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4 col-12">
+    <div class="card border-success">
+      <div class="card-body text-center">
+        <div class="text-success fw-bold">When scoring 200+ batting first</div>
+        <div class="display-6">{{ h.bat_200_plus.win_pct }}%</div>
+        <div class="text-muted">Win rate ({{ h.bat_200_plus.wins }}/{{ h.bat_200_plus.matches }})</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4 col-12">
+    <div class="card border-warning">
+      <div class="card-body text-center">
+        <div class="text-warning fw-bold">When chasing 180+</div>
+        <div class="display-6">{{ h.chase_180_plus.win_pct }}%</div>
+        <div class="text-muted">Win rate ({{ h.chase_180_plus.wins }}/{{ h.chase_180_plus.matches }})</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-success text-white"><strong>Score Buckets — Batting 1st</strong></div>
+      <div class="card-body table-responsive p-0">
+        <table class="table table-striped mb-0">
+          <thead class="table-dark"><tr><th>Total</th><th>Matches</th><th>Wins</th><th>Losses</th><th>Win %</th></tr></thead>
+          <tbody>
+            {% for r in result.bat_first %}
+            <tr>
+              <td><strong>{{ r.bucket }}</strong></td>
+              <td>{{ r.matches }}</td>
+              <td class="text-success">{{ r.wins }}</td>
+              <td class="text-danger">{{ r.losses }}</td>
+              <td><span class="badge {% if r.win_pct>=50 %}bg-success{% else %}bg-secondary{% endif %}">{{ r.win_pct }}%</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-warning text-dark"><strong>Chase Targets</strong></div>
+      <div class="card-body table-responsive p-0">
+        <table class="table table-striped mb-0">
+          <thead class="table-dark"><tr><th>Target</th><th>Matches</th><th>Wins</th><th>Losses</th><th>Win %</th></tr></thead>
+          <tbody>
+            {% for r in result.chase %}
+            <tr>
+              <td><strong>{{ r.bucket }}</strong></td>
+              <td>{{ r.matches }}</td>
+              <td class="text-success">{{ r.wins }}</td>
+              <td class="text-danger">{{ r.losses }}</td>
+              <td><span class="badge {% if r.win_pct>=50 %}bg-success{% else %}bg-secondary{% endif %}">{{ r.win_pct }}%</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% elif selected_team %}
+<div class="alert alert-info">No matches found with the selected filters.</div>
+{% else %}
+<div class="alert alert-secondary">Pick a team to see their score-based winning patterns.</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function sync() {
+        const cbs = document.querySelectorAll('.season-cb');
+        const selected = Array.from(cbs).filter(c => c.checked).map(c => c.value);
+        const btn = document.getElementById('season-dd-btn');
+        if (btn) btn.textContent = selected.length === 0 ? 'All Seasons' : (selected.length === 1 ? selected[0] : `${selected.length} seasons`);
+        const c = document.getElementById('season-hidden-container');
+        if (c) c.innerHTML = selected.map(s => `<input type="hidden" name="season" value="${s}">`).join('');
+    }
+    document.querySelectorAll('.season-cb').forEach(cb => cb.addEventListener('change', sync));
+    const cb = document.getElementById('season-clear-btn');
+    if (cb) cb.addEventListener('click', function() {
+        document.querySelectorAll('.season-cb').forEach(c => c.checked = false); sync();
+    });
+});
+</script>
+{% endblock %}

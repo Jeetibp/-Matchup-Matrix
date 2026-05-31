@@ -325,15 +325,15 @@ def batting():
         leagues = available_leagues()
         min_innings = request.args.get("min_innings", 5, type=int)
         innings_filter = request.args.get("innings_filter", 0, type=int)
-        season = request.args.get("season", "all").strip()
+        selected_seasons = [s for s in request.args.getlist("season") if s and s != 'all']
         filter_val = innings_filter if innings_filter in [1,2] else None
         seasons = []
         
         if analytics:
             seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
-            if season and season != 'all':
+            if selected_seasons:
                 filtered = CricketAnalytics.__new__(CricketAnalytics)
-                filtered.df = analytics.df[analytics.df['season'].astype(str) == season].copy()
+                filtered.df = analytics.df[analytics.df['season'].astype(str).isin(selected_seasons)].copy()
                 stats = filtered.get_batting_stats(min_innings, innings_filter=filter_val)
             else:
                 stats = get_cached_stats(analytics, league, 'batting', min_innings, filter_val)
@@ -348,7 +348,7 @@ def batting():
             stats=stats.to_dict("records") if analytics and hasattr(stats, 'to_dict') and not stats.empty else [],
             min_innings=min_innings,
             innings_filter=innings_filter,
-            season=season,
+            selected_seasons=selected_seasons,
             seasons=seasons,
             league=league,
             leagues=leagues,
@@ -361,7 +361,7 @@ def batting():
             stats=[],
             min_innings=5,
             innings_filter=0,
-            season='all',
+            selected_seasons=[],
             seasons=[],
             league=None,
             leagues=available_leagues(),
@@ -376,15 +376,15 @@ def bowling():
         leagues = available_leagues()
         min_innings = request.args.get("min_innings", 3, type=int)
         innings_filter = request.args.get("innings_filter", 0, type=int)
-        season = request.args.get("season", "all").strip()
+        selected_seasons = [s for s in request.args.getlist("season") if s and s != 'all']
         filter_val = innings_filter if innings_filter in [1,2] else None
         seasons = []
         
         if analytics:
             seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
-            if season and season != 'all':
+            if selected_seasons:
                 filtered = CricketAnalytics.__new__(CricketAnalytics)
-                filtered.df = analytics.df[analytics.df['season'].astype(str) == season].copy()
+                filtered.df = analytics.df[analytics.df['season'].astype(str).isin(selected_seasons)].copy()
                 stats = filtered.get_bowling_stats(min_innings, innings_filter=filter_val)
             else:
                 stats = get_cached_stats(analytics, league, 'bowling', min_innings, filter_val)
@@ -399,7 +399,7 @@ def bowling():
             stats=stats.to_dict("records") if analytics and hasattr(stats, 'to_dict') and not stats.empty else [],
             min_innings=min_innings,
             innings_filter=innings_filter,
-            season=season,
+            selected_seasons=selected_seasons,
             seasons=seasons,
             league=league,
             leagues=leagues,
@@ -412,7 +412,7 @@ def bowling():
             stats=[],
             min_innings=3,
             innings_filter=0,
-            season='all',
+            selected_seasons=[],
             seasons=[],
             league=None,
             leagues=available_leagues(),
@@ -681,7 +681,14 @@ def api_player_stats():
             return jsonify({'error': 'No data loaded.'})
         name = request.args.get('name', '').strip()
         ptype = request.args.get('ptype', 'batsman')
-        season = request.args.get('season', '').strip()
+        # Accept multiple seasons: either repeated ?season=X or comma-separated
+        raw_seasons = request.args.getlist('season')
+        seasons_list = []
+        for s in raw_seasons:
+            for part in s.split(','):
+                part = part.strip()
+                if part and part != 'all':
+                    seasons_list.append(part)
         venue = request.args.get('venue', '').strip()
         if not name:
             return jsonify({'error': 'No player name specified.'})
@@ -693,14 +700,14 @@ def api_player_stats():
         try:
             # Apply season + venue filters
             filtered_df = analytics.df
-            if season and season != 'all':
-                filtered_df = filtered_df[filtered_df['season'].astype(str) == season]
+            if seasons_list:
+                filtered_df = filtered_df[filtered_df['season'].astype(str).isin(seasons_list)]
             if venue and venue != 'all':
                 # Expand canonical venue name to all its dataset variants
                 venue_map = get_venue_map(league)
                 venue_variants = get_venue_variants(venue, venue_map)
                 filtered_df = filtered_df[filtered_df['venue'].isin(venue_variants)]
-            if season != 'all' or (venue and venue != 'all'):
+            if seasons_list or (venue and venue != 'all'):
                 work = CricketAnalytics.__new__(CricketAnalytics)
                 work.df = filtered_df.copy()
                 work_df = work.df
@@ -818,7 +825,8 @@ def venuestats():
         venues, teams = analytics.get_venue_team_options() if analytics else ([], [])
         selected_venue = request.args.get("venue", "")
         selected_team = request.args.get("team", "")
-        selected_season = request.args.get("season", "all").strip()
+        # Accept multiple seasons; legacy single ?season=all still works
+        selected_seasons = [s for s in request.args.getlist("season") if s and s != 'all']
         compare_teams = request.args.getlist("compare_teams")
         team_stats = None
         venue_characteristics = None
@@ -828,9 +836,9 @@ def venuestats():
 
         if analytics:
             seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
-            if selected_season and selected_season != 'all':
+            if selected_seasons:
                 work = CricketAnalytics.__new__(CricketAnalytics)
-                work.df = analytics.df[analytics.df['season'].astype(str) == selected_season].copy()
+                work.df = analytics.df[analytics.df['season'].astype(str).isin(selected_seasons)].copy()
             else:
                 work = analytics
         else:
@@ -844,6 +852,12 @@ def venuestats():
 
                 # Get venue records
                 venue_records = work.get_venue_records(selected_venue)
+
+                # New: recent matches, all-teams summary, top batsmen/bowlers at venue
+                recent_matches = work.get_venue_recent_matches(selected_venue, n=10)
+                teams_summary = work.get_venue_all_teams_summary(selected_venue)
+                top_batsmen = work.get_venue_top_batsmen(selected_venue, n=10)
+                top_bowlers = work.get_venue_top_bowlers(selected_venue, n=10)
 
                 # Single team analysis
                 if selected_team:
@@ -863,6 +877,11 @@ def venuestats():
             except Exception as e:
                 print(f"Error in venue analysis: {e}")
                 error = f"Error analyzing venue performance: {str(e)}"
+        else:
+            recent_matches = []
+            teams_summary = []
+            top_batsmen = []
+            top_bowlers = []
 
         return render_template(
             "venuestats.html",
@@ -871,12 +890,16 @@ def venuestats():
             seasons=seasons,
             selected_venue=selected_venue,
             selected_team=selected_team,
-            selected_season=selected_season,
+            selected_seasons=selected_seasons,
             compare_teams=compare_teams,
             team_stats=team_stats,
             venue_characteristics=venue_characteristics,
             team_comparison=team_comparison,
             venue_records=venue_records,
+            recent_matches=recent_matches,
+            teams_summary=teams_summary,
+            top_batsmen=top_batsmen,
+            top_bowlers=top_bowlers,
             league=league,
             leagues=leagues,
             error=error
@@ -890,16 +913,191 @@ def venuestats():
             seasons=[],
             selected_venue="",
             selected_team="",
-            selected_season="all",
+            selected_seasons=[],
             compare_teams=[],
             team_stats=None,
             venue_characteristics=None,
             team_comparison=None,
             venue_records=None,
+            recent_matches=[],
+            teams_summary=[],
+            top_batsmen=[],
+            top_bowlers=[],
             league=None,
             leagues=available_leagues(),
             error=f"Error loading venue stats: {str(e)}"
         )
+
+@app.route("/phasestats", methods=["GET"])
+def phasestats():
+    """Phase-wise analysis page (Powerplay / Middle1 / Middle2 / Death)."""
+    try:
+        analytics, league, error = get_analytics()
+        leagues = available_leagues()
+        venues, teams = analytics.get_venue_team_options() if analytics else ([], [])
+        selected_venue = request.args.get("venue", "").strip()
+        selected_team = request.args.get("team", "").strip()
+        selected_seasons = [s for s in request.args.getlist("season") if s and s != 'all']
+        seasons = []
+        phase_result = None
+
+        if analytics:
+            seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
+            if selected_seasons:
+                work = CricketAnalytics.__new__(CricketAnalytics)
+                work.df = analytics.df[analytics.df['season'].astype(str).isin(selected_seasons)].copy()
+            else:
+                work = analytics
+        else:
+            work = None
+
+        if work is not None and (selected_venue or selected_team or selected_seasons):
+            try:
+                phase_result = work.get_phase_analysis(
+                    venue=selected_venue or None,
+                    team=selected_team or None,
+                )
+                gc.collect()
+            except Exception as e:
+                print(f"Error in phase analysis: {e}")
+                error = f"Error analyzing phases: {str(e)}"
+
+        return render_template(
+            "phasestats.html",
+            venues=venues,
+            teams=teams,
+            seasons=seasons,
+            selected_venue=selected_venue,
+            selected_team=selected_team,
+            selected_seasons=selected_seasons,
+            phase_result=phase_result,
+            league=league,
+            leagues=leagues,
+            error=error,
+        )
+    except Exception as e:
+        print(f"Error in phasestats route: {e}")
+        return render_template(
+            "phasestats.html",
+            venues=[], teams=[], seasons=[],
+            selected_venue="", selected_team="", selected_seasons=[],
+            phase_result=None, league=None,
+            leagues=available_leagues(),
+            error=f"Error loading phase stats: {str(e)}",
+        )
+
+@app.route("/teamvsteam", methods=["GET"])
+def teamvsteam():
+    """Team vs Team head-to-head page."""
+    try:
+        analytics, league, error = get_analytics()
+        leagues = available_leagues()
+        venues, teams = analytics.get_venue_team_options() if analytics else ([], [])
+        team_a = request.args.get("team_a", "").strip()
+        team_b = request.args.get("team_b", "").strip()
+        selected_venue = request.args.get("venue", "").strip()
+        try:
+            innings_filter = int(request.args.get("innings_filter", 0))
+        except (ValueError, TypeError):
+            innings_filter = 0
+        selected_seasons = [s for s in request.args.getlist("season") if s and s != 'all']
+        seasons = []
+        result = None
+
+        if analytics:
+            seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
+            if selected_seasons:
+                work = CricketAnalytics.__new__(CricketAnalytics)
+                work.df = analytics.df[analytics.df['season'].astype(str).isin(selected_seasons)].copy()
+            else:
+                work = analytics
+        else:
+            work = None
+
+        if work is not None and team_a and team_b and team_a != team_b:
+            try:
+                result = work.get_team_vs_team(
+                    team_a, team_b,
+                    venue=selected_venue or None,
+                    innings_filter=innings_filter if innings_filter in (1, 2) else None,
+                )
+                gc.collect()
+            except Exception as e:
+                print(f"Error in team vs team: {e}")
+                error = f"Error: {str(e)}"
+
+        return render_template(
+            "teamvsteam.html",
+            venues=venues, teams=teams, seasons=seasons,
+            team_a=team_a, team_b=team_b,
+            selected_venue=selected_venue,
+            selected_seasons=selected_seasons,
+            innings_filter=innings_filter,
+            result=result,
+            league=league, leagues=leagues, error=error,
+        )
+    except Exception as e:
+        print(f"Error in teamvsteam route: {e}")
+        return render_template(
+            "teamvsteam.html",
+            venues=[], teams=[], seasons=[],
+            team_a="", team_b="", selected_venue="",
+            selected_seasons=[], innings_filter=0, result=None,
+            league=None, leagues=available_leagues(),
+            error=f"Error: {str(e)}",
+        )
+
+
+@app.route("/winpatterns", methods=["GET"])
+def winpatterns():
+    """Winning pattern analysis page (score buckets)."""
+    try:
+        analytics, league, error = get_analytics()
+        leagues = available_leagues()
+        venues, teams = analytics.get_venue_team_options() if analytics else ([], [])
+        selected_team = request.args.get("team", "").strip()
+        selected_venue = request.args.get("venue", "").strip()
+        selected_seasons = [s for s in request.args.getlist("season") if s and s != 'all']
+        seasons = []
+        result = None
+
+        if analytics:
+            seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
+            if selected_seasons:
+                work = CricketAnalytics.__new__(CricketAnalytics)
+                work.df = analytics.df[analytics.df['season'].astype(str).isin(selected_seasons)].copy()
+            else:
+                work = analytics
+        else:
+            work = None
+
+        if work is not None and selected_team:
+            try:
+                result = work.get_winning_patterns(selected_team, venue=selected_venue or None)
+                gc.collect()
+            except Exception as e:
+                print(f"Error in winning patterns: {e}")
+                error = f"Error: {str(e)}"
+
+        return render_template(
+            "winpatterns.html",
+            venues=venues, teams=teams, seasons=seasons,
+            selected_team=selected_team, selected_venue=selected_venue,
+            selected_seasons=selected_seasons,
+            result=result,
+            league=league, leagues=leagues, error=error,
+        )
+    except Exception as e:
+        print(f"Error in winpatterns route: {e}")
+        return render_template(
+            "winpatterns.html",
+            venues=[], teams=[], seasons=[],
+            selected_team="", selected_venue="", selected_seasons=[],
+            result=None,
+            league=None, leagues=available_leagues(),
+            error=f"Error: {str(e)}",
+        )
+
 
 @app.route("/user_guide")
 def user_guide():

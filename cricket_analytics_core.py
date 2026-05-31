@@ -382,19 +382,30 @@ class CricketAnalytics:
                 
                 dot_pct_numeric = pd.to_numeric(dot_pct, errors='coerce').fillna(0)
                 boundary_pct_numeric = pd.to_numeric(boundary_pct, errors='coerce').fillna(0)
+
+                # Average per innings (matches the player card "Average" field)
+                avg_raw = runs / inns.replace(0, pd.NA)
+                avg = pd.to_numeric(avg_raw, errors='coerce').fillna(0)
                 
+                # Avoid CategoricalIndex code-dtype mismatch on reindex by using object index
+                target_idx = runs.index.astype(object)
+                for _s in (hundreds, fifties, highest_score, rpi_1, rpi_2):
+                    if hasattr(_s.index, 'categories'):
+                        _s.index = _s.index.astype(object)
+
                 stats = pd.DataFrame({
                     'batsman': runs.index,
                     'runs': runs.values,
                     'innings': inns.values, 
                     'balls': balls.values,
+                    'AVG': avg.round(2),
                     'SR': sr.round(2),
-                    'hundreds': hundreds.reindex(runs.index, fill_value=0),
-                    'fifties': fifties.reindex(runs.index, fill_value=0),
-                    'hs': highest_score.reindex(runs.index, fill_value=0),
+                    'hundreds': hundreds.reindex(target_idx, fill_value=0).values,
+                    'fifties': fifties.reindex(target_idx, fill_value=0).values,
+                    'hs': highest_score.reindex(target_idx, fill_value=0).values,
                     'RPI': rpi_all.round(2),
-                    'RPI_1': rpi_1.reindex(runs.index, fill_value=0).round(2),
-                    'RPI_2': rpi_2.reindex(runs.index, fill_value=0).round(2),
+                    'RPI_1': rpi_1.reindex(target_idx, fill_value=0).round(2).values,
+                    'RPI_2': rpi_2.reindex(target_idx, fill_value=0).round(2).values,
                     'Dot%': dot_pct_numeric.round(2),
                     'Boundary%': boundary_pct_numeric.round(2),
                     'BPD': bpd.round(2),
@@ -449,11 +460,21 @@ class CricketAnalytics:
             inns = df.groupby('bowler', observed=True)['match_id'].nunique()
             wickets = df.groupby('bowler', observed=True)['isBowlerWk'].sum()
             dots = df.groupby('bowler', observed=True)['isDot'].sum()
+            fours_c = df.groupby('bowler', observed=True)['isFour'].sum()
+            sixes_c = df.groupby('bowler', observed=True)['isSix'].sum()
             eco = runs / (balls / 6)
             dot_pct = dots / balls * 100
             avg = (runs / wickets).replace([float('inf'), float('nan')], 0)
             sr = (balls / wickets).replace([float('inf'), float('nan')], 0).round(2)
+            bpb = (balls / (fours_c + sixes_c).replace(0, pd.NA))
+            bpb = pd.to_numeric(bpb, errors='coerce').fillna(0)
             
+            # Avoid CategoricalIndex code-dtype mismatch on reindex by using object index
+            target_idx = runs.index.astype(object)
+            for _s in (wickets_1, wickets_2, best, five_wkts):
+                if hasattr(_s.index, 'categories'):
+                    _s.index = _s.index.astype(object)
+
             stats = pd.DataFrame({
                 'bowler': runs.index,
                 'innings': inns.values,
@@ -464,10 +485,11 @@ class CricketAnalytics:
                 'AVG': avg.round(2).fillna(0),
                 'SR': sr.values,
                 'Dot%': dot_pct.round(2).fillna(0),
-                'wickets_1': wickets_1.reindex(runs.index, fill_value=0).astype(int),
-                'wickets_2': wickets_2.reindex(runs.index, fill_value=0).astype(int),
-                'best': best.reindex(runs.index, fill_value=0).astype(int),
-                'five_wkts': five_wkts.reindex(runs.index, fill_value=0).astype(int),
+                'BPB': bpb.round(2).values,
+                'wickets_1': wickets_1.reindex(target_idx, fill_value=0).astype(int).values,
+                'wickets_2': wickets_2.reindex(target_idx, fill_value=0).astype(int).values,
+                'best': best.reindex(target_idx, fill_value=0).astype(int).values,
+                'five_wkts': five_wkts.reindex(target_idx, fill_value=0).astype(int).values,
             })
             
             stats = stats[stats['innings']>=min_innings].sort_values('wickets',ascending=False).reset_index(drop=True)
@@ -812,21 +834,68 @@ class CricketAnalytics:
             total_balls = len(venue_matches)
             boundary_rate = ((total_fours + total_sixes) / total_balls * 100) if total_balls > 0 else 0
             
-            # High scoring vs low scoring
-            high_scores = (match_innings_stats >= 150).sum().sum()
-            low_scores = (match_innings_stats <= 120).sum().sum()
-            
+            # High scoring vs low scoring — count matches (not innings), exclude fill_value=0 phantom entries
+            high_scores = int(((match_innings_stats >= 180) & (match_innings_stats > 0)).any(axis=1).sum())
+            low_scores = int(((match_innings_stats < 150) & (match_innings_stats > 0)).any(axis=1).sum())
+
+            # Bat-first vs Chase win split (only matches with both innings present)
+            both = match_innings_stats[(match_innings_stats.get(1, 0) > 0) & (match_innings_stats.get(2, 0) > 0)]
+            completed = len(both)
+            chase_wins = int((both[2] > both[1]).sum()) if completed else 0
+            batfirst_wins = int((both[1] > both[2]).sum()) if completed else 0
+            chase_win_pct = round(chase_wins * 100.0 / completed, 2) if completed else 0.0
+            batfirst_win_pct = round(batfirst_wins * 100.0 / completed, 2) if completed else 0.0
+
+            # Highest team total and lowest completed team total at venue
+            inn_totals = venue_matches.groupby(['match_id', 'innings', 'batting_team'], observed=True)['total_runs'].sum().reset_index()
+            highest_total = None
+            lowest_total = None
+            highest_chase = None
+            if not inn_totals.empty:
+                hi = inn_totals.loc[inn_totals['total_runs'].idxmax()]
+                highest_total = {
+                    'team': str(hi['batting_team']),
+                    'runs': int(hi['total_runs']),
+                }
+                # Lowest: exclude tiny totals (likely abandoned matches) — require >= 50
+                low_pool = inn_totals[inn_totals['total_runs'] >= 50]
+                if not low_pool.empty:
+                    lo = low_pool.loc[low_pool['total_runs'].idxmin()]
+                    lowest_total = {
+                        'team': str(lo['batting_team']),
+                        'runs': int(lo['total_runs']),
+                    }
+                # Highest successful chase: largest 2nd-innings total that beat the 1st-innings
+                if completed:
+                    chase_pool = inn_totals[inn_totals['innings'] == 2].copy()
+                    inn1_map = inn_totals[inn_totals['innings'] == 1].set_index('match_id')['total_runs']
+                    chase_pool['inn1'] = chase_pool['match_id'].map(inn1_map)
+                    successful = chase_pool[chase_pool['total_runs'] > chase_pool['inn1']]
+                    if not successful.empty:
+                        ch = successful.loc[successful['total_runs'].idxmax()]
+                        highest_chase = {
+                            'team': str(ch['batting_team']),
+                            'runs': int(ch['total_runs']),
+                            'target': int(ch['inn1']) + 1,
+                        }
+
             result = {
                 'venue': venue_name,
                 'total_matches': total_matches,
                 'avg_1st_innings': round(avg_1st_innings, 2),
                 'avg_2nd_innings': round(avg_2nd_innings, 2),
                 'chase_success_rate': round(chase_success_rate, 2),
+                'batfirst_win_pct': batfirst_win_pct,
+                'chase_win_pct': chase_win_pct,
+                'completed_matches': completed,
                 'boundary_rate': round(boundary_rate, 2),
                 'high_scores': int(high_scores),
                 'low_scores': int(low_scores),
                 'total_fours': int(total_fours),
-                'total_sixes': int(total_sixes)
+                'total_sixes': int(total_sixes),
+                'highest_total': highest_total,
+                'lowest_total': lowest_total,
+                'highest_chase': highest_chase,
             }
             
             # Memory cleanup
@@ -898,18 +967,688 @@ class CricketAnalytics:
             print(f"Error in venue records: {e}")
             return None
 
+    def get_venue_recent_matches(self, venue_name, n=10):
+        """Return the last `n` matches at the given venue as list of dicts with date/teams/scores/result."""
+        try:
+            vm = self.df[self.df['venue'] == venue_name]
+            if vm.empty:
+                return []
+            # Per-innings totals + wickets
+            inn = vm.groupby(['match_id', 'innings', 'batting_team'], observed=True).agg(
+                runs=('total_runs', 'sum'),
+                wickets=('player_dismissed', lambda s: s.notna().sum())
+            ).reset_index()
+            # Pivot to one row per match
+            i1 = inn[inn['innings'] == 1].rename(columns={'batting_team': 'team1', 'runs': 'score1', 'wickets': 'wkts1'})[['match_id', 'team1', 'score1', 'wkts1']]
+            i2 = inn[inn['innings'] == 2].rename(columns={'batting_team': 'team2', 'runs': 'score2', 'wickets': 'wkts2'})[['match_id', 'team2', 'score2', 'wkts2']]
+            m = i1.merge(i2, on='match_id', how='inner')
+            # Date (latest start_date per match) for sorting
+            if 'start_date' in vm.columns:
+                dates = vm.groupby('match_id', observed=True)['start_date'].first().reset_index()
+                m = m.merge(dates, on='match_id', how='left')
+                m['_sort'] = pd.to_datetime(m['start_date'], errors='coerce')
+                m = m.sort_values('_sort', ascending=False, na_position='last')
+            else:
+                m = m.sort_values('match_id', ascending=False)
+            m = m.head(n)
+            out = []
+            for _, r in m.iterrows():
+                s1, s2, w1, w2 = int(r['score1']), int(r['score2']), int(r['wkts1']), int(r['wkts2'])
+                if s1 > s2:
+                    result = f"{r['team1']} won by {s1 - s2} runs"
+                elif s2 > s1:
+                    result = f"{r['team2']} won by {10 - w2} wickets"
+                else:
+                    result = "Tied"
+                out.append({
+                    'date': str(r['start_date']) if 'start_date' in m.columns and pd.notna(r.get('start_date')) else '',
+                    'team1': str(r['team1']), 'score1': f"{s1}/{w1}",
+                    'team2': str(r['team2']), 'score2': f"{s2}/{w2}",
+                    'result': result,
+                })
+            del vm, inn, i1, i2, m
+            gc.collect()
+            return out
+        except Exception as e:
+            print(f"Error in venue recent matches: {e}")
+            return []
+
+    def get_venue_all_teams_summary(self, venue_name):
+        """Return per-team summary at venue: matches, total_runs, avg_innings, HS, LS, wins (sorted by matches desc)."""
+        try:
+            vm = self.df[self.df['venue'] == venue_name]
+            if vm.empty:
+                return []
+            # Per match-innings totals
+            mi = vm.groupby(['match_id', 'innings', 'batting_team'], observed=True)['total_runs'].sum().reset_index()
+            # Determine winner per match
+            winners = {}
+            for mid, g in mi.groupby('match_id', observed=True):
+                if len(g) < 2:
+                    continue
+                g1 = g[g['innings'] == 1]
+                g2 = g[g['innings'] == 2]
+                if g1.empty or g2.empty:
+                    continue
+                s1, t1 = int(g1['total_runs'].iloc[0]), g1['batting_team'].iloc[0]
+                s2, t2 = int(g2['total_runs'].iloc[0]), g2['batting_team'].iloc[0]
+                winners[mid] = t1 if s1 > s2 else (t2 if s2 > s1 else None)
+            # Aggregate per team
+            out = []
+            for team, tg in mi.groupby('batting_team', observed=True):
+                team = str(team)
+                matches = tg['match_id'].nunique()
+                if matches == 0:
+                    continue
+                total = int(tg['total_runs'].sum())
+                hs = int(tg['total_runs'].max())
+                ls = int(tg['total_runs'].min())
+                avg = round(total / matches, 2) if matches else 0
+                wins = sum(1 for mid in tg['match_id'].unique() if winners.get(mid) == team)
+                out.append({
+                    'team': team, 'matches': matches, 'total_runs': total,
+                    'avg': avg, 'hs': hs, 'ls': ls, 'wins': wins,
+                    'win_pct': round(wins / matches * 100, 2) if matches else 0,
+                })
+            out.sort(key=lambda r: (-r['matches'], -r['avg']))
+            del vm, mi, winners
+            gc.collect()
+            return out
+        except Exception as e:
+            print(f"Error in venue all-teams summary: {e}")
+            return []
+
+    def get_venue_top_batsmen(self, venue_name, n=10, min_balls=20):
+        """Return top batsmen at the venue by runs scored."""
+        try:
+            vm = self.df[self.df['venue'] == venue_name]
+            if vm.empty:
+                return []
+            g = vm.groupby('batsman', observed=True).agg(
+                runs=('runs_of_bat', 'sum'),
+                balls=('runs_of_bat', 'count'),
+                fours=('isFour', 'sum'),
+                sixes=('isSix', 'sum'),
+            ).reset_index()
+            g['matches'] = vm.groupby('batsman', observed=True)['match_id'].nunique().reindex(g['batsman']).values
+            g = g[g['balls'] >= min_balls]
+            g['sr'] = (g['runs'] / g['balls'] * 100).round(2)
+            g = g.sort_values('runs', ascending=False).head(n)
+            out = []
+            for _, r in g.iterrows():
+                out.append({
+                    'batsman': str(r['batsman']),
+                    'matches': int(r['matches']),
+                    'runs': int(r['runs']),
+                    'balls': int(r['balls']),
+                    'sr': float(r['sr']),
+                    'fours': int(r['fours']),
+                    'sixes': int(r['sixes']),
+                })
+            del vm, g
+            gc.collect()
+            return out
+        except Exception as e:
+            print(f"Error in venue top batsmen: {e}")
+            return []
+
+    def get_venue_top_bowlers(self, venue_name, n=10, min_balls=24):
+        """Return top bowlers at the venue by wickets."""
+        try:
+            vm = self.df[self.df['venue'] == venue_name]
+            if vm.empty:
+                return []
+            g = vm.groupby('bowler', observed=True).agg(
+                wickets=('isBowlerWk', 'sum'),
+                runs=('total_runs', 'sum'),
+                balls=('isBowlerWk', 'count'),
+            ).reset_index()
+            g['matches'] = vm.groupby('bowler', observed=True)['match_id'].nunique().reindex(g['bowler']).values
+            g = g[g['balls'] >= min_balls]
+            g['eco'] = (g['runs'] / (g['balls'] / 6)).round(2)
+            g['avg'] = g.apply(lambda r: round(r['runs'] / r['wickets'], 2) if r['wickets'] else 0, axis=1)
+            g['sr'] = g.apply(lambda r: round(r['balls'] / r['wickets'], 2) if r['wickets'] else 0, axis=1)
+            g = g.sort_values('wickets', ascending=False).head(n)
+            out = []
+            for _, r in g.iterrows():
+                out.append({
+                    'bowler': str(r['bowler']),
+                    'matches': int(r['matches']),
+                    'wickets': int(r['wickets']),
+                    'runs': int(r['runs']),
+                    'balls': int(r['balls']),
+                    'eco': float(r['eco']),
+                    'avg': float(r['avg']),
+                    'sr': float(r['sr']),
+                })
+            del vm, g
+            gc.collect()
+            return out
+        except Exception as e:
+            print(f"Error in venue top bowlers: {e}")
+            return []
+
+    def get_phase_analysis(self, venue=None, team=None, n_recent=15):
+        """Phase-wise analysis (PP1: 1-6, PP2: 7-10, PP3: 11-15, PP4: 16-20).
+
+        Filters by venue and/or team if provided. Returns:
+          - phase_overall: dict of avg runs/wkts per phase across all innings considered
+          - team_summary (only if team given): matches, wins, losses, win%, avg per phase when winning vs losing
+          - team_breakdown (only if team is None): list of per-team avg phase runs
+          - recent_matches: list of last N matches (full both-innings phase breakdown)
+        """
+        try:
+            df = self.df
+            if venue:
+                df = df[df['venue'] == venue]
+            if df.empty:
+                return None
+
+            # Restrict to matches involving the team (if filtering by team)
+            if team:
+                team_match_ids = df[df['batting_team'] == team]['match_id'].unique()
+                if len(team_match_ids) == 0:
+                    return None
+                df = df[df['match_id'].isin(team_match_ids)]
+
+            # Phase classifier from float over (e.g. 0.1..19.6)
+            over_int = df['over'].astype(float).apply(lambda x: int(x))
+            def _phase(o):
+                if o <= 5: return 'PP1'
+                if o <= 9: return 'PP2'
+                if o <= 14: return 'PP3'
+                return 'PP4'
+            df = df.assign(phase=over_int.map(_phase))
+
+            # Per match / per innings / per phase aggregation
+            grp = df.groupby(['match_id', 'innings', 'batting_team', 'phase'], observed=True).agg(
+                runs=('total_runs', 'sum'),
+                wickets=('isBowlerWk', 'sum'),
+                player_dismissed=('player_dismissed', lambda s: s.notna().sum()),
+            ).reset_index()
+            # use player_dismissed (includes run outs) as authoritative wicket count per phase
+            grp['wickets'] = grp['player_dismissed'].astype(int)
+            grp = grp.drop(columns=['player_dismissed'])
+
+            # Pivot: per (match, innings) → columns PP1_runs, PP1_wkts...
+            piv_runs = grp.pivot_table(index=['match_id', 'innings', 'batting_team'], columns='phase', values='runs', fill_value=0, observed=False)
+            piv_wkts = grp.pivot_table(index=['match_id', 'innings', 'batting_team'], columns='phase', values='wickets', fill_value=0, observed=False)
+            for p in ['PP1', 'PP2', 'PP3', 'PP4']:
+                if p not in piv_runs.columns: piv_runs[p] = 0
+                if p not in piv_wkts.columns: piv_wkts[p] = 0
+            piv_runs = piv_runs[['PP1', 'PP2', 'PP3', 'PP4']]
+            piv_wkts = piv_wkts[['PP1', 'PP2', 'PP3', 'PP4']]
+
+            # Build per-innings rows
+            inn = piv_runs.copy()
+            inn.columns = [f'{c}_runs' for c in inn.columns]
+            for p in ['PP1', 'PP2', 'PP3', 'PP4']:
+                inn[f'{p}_wkts'] = piv_wkts[p]
+            inn = inn.reset_index()
+            inn['total_runs'] = inn[['PP1_runs', 'PP2_runs', 'PP3_runs', 'PP4_runs']].sum(axis=1)
+            inn['total_wkts'] = inn[['PP1_wkts', 'PP2_wkts', 'PP3_wkts', 'PP4_wkts']].sum(axis=1)
+
+            # Determine winner per match: team batting second wins if their total >= target (innings1 + 1)
+            winners = {}
+            for mid, g in inn.groupby('match_id'):
+                if g['innings'].nunique() < 2:
+                    continue
+                try:
+                    g1 = g[g['innings'] == 1].iloc[0]
+                    g2 = g[g['innings'] == 2].iloc[0]
+                    target = int(g1['total_runs']) + 1
+                    winner = g2['batting_team'] if int(g2['total_runs']) >= target else g1['batting_team']
+                    winners[mid] = winner
+                except Exception:
+                    continue
+            inn['winner'] = inn['match_id'].map(winners)
+
+            # Phase overall averages (across all innings considered)
+            phase_overall = {}
+            for p in ['PP1', 'PP2', 'PP3', 'PP4']:
+                phase_overall[p] = {
+                    'avg_runs': round(float(inn[f'{p}_runs'].mean()), 2),
+                    'avg_wkts': round(float(inn[f'{p}_wkts'].mean()), 2),
+                }
+            phase_overall['innings_count'] = int(len(inn))
+            phase_overall['matches'] = int(inn['match_id'].nunique())
+
+            result = {
+                'venue': venue,
+                'team': team,
+                'phase_overall': phase_overall,
+            }
+
+            # Team-specific summary (when team filter given)
+            if team:
+                team_inn = inn[inn['batting_team'] == team].copy()
+                team_inn_with_winner = team_inn.dropna(subset=['winner'])
+                wins = team_inn_with_winner[team_inn_with_winner['winner'] == team]
+                losses = team_inn_with_winner[team_inn_with_winner['winner'] != team]
+                def _avgs(frame):
+                    if frame.empty:
+                        return {p: {'avg_runs': 0.0, 'avg_wkts': 0.0} for p in ['PP1', 'PP2', 'PP3', 'PP4']}
+                    return {p: {
+                        'avg_runs': round(float(frame[f'{p}_runs'].mean()), 2),
+                        'avg_wkts': round(float(frame[f'{p}_wkts'].mean()), 2),
+                    } for p in ['PP1', 'PP2', 'PP3', 'PP4']}
+                total = len(team_inn_with_winner)
+                result['team_summary'] = {
+                    'team': team,
+                    'innings': int(len(team_inn)),
+                    'matches_with_result': int(total),
+                    'wins': int(len(wins)),
+                    'losses': int(len(losses)),
+                    'win_pct': round(len(wins) * 100.0 / total, 2) if total else 0.0,
+                    'avg_when_winning': _avgs(wins),
+                    'avg_when_losing': _avgs(losses),
+                    'avg_batting_first': _avgs(team_inn[team_inn['innings'] == 1]),
+                    'avg_batting_second': _avgs(team_inn[team_inn['innings'] == 2]),
+                    'innings_first_count': int((team_inn['innings'] == 1).sum()),
+                    'innings_second_count': int((team_inn['innings'] == 2).sum()),
+                    'highest_score': int(team_inn['total_runs'].max()) if len(team_inn) else 0,
+                    'lowest_score': int(team_inn['total_runs'].min()) if len(team_inn) else 0,
+                    'avg_score': round(float(team_inn['total_runs'].mean()), 2) if len(team_inn) else 0.0,
+                }
+            else:
+                # Team breakdown across all teams in this slice
+                team_avgs = inn.groupby('batting_team', observed=True).agg(
+                    innings=('match_id', 'count'),
+                    PP1_runs=('PP1_runs', 'mean'), PP2_runs=('PP2_runs', 'mean'),
+                    PP3_runs=('PP3_runs', 'mean'), PP4_runs=('PP4_runs', 'mean'),
+                    total_runs=('total_runs', 'mean'),
+                ).reset_index()
+                team_avgs = team_avgs[team_avgs['innings'] > 0].sort_values('total_runs', ascending=False)
+                breakdown = []
+                for _, r in team_avgs.iterrows():
+                    breakdown.append({
+                        'team': str(r['batting_team']),
+                        'innings': int(r['innings']),
+                        'PP1': round(float(r['PP1_runs']), 2),
+                        'PP2': round(float(r['PP2_runs']), 2),
+                        'PP3': round(float(r['PP3_runs']), 2),
+                        'PP4': round(float(r['PP4_runs']), 2),
+                        'avg_total': round(float(r['total_runs']), 2),
+                    })
+                result['team_breakdown'] = breakdown
+
+            # Recent matches (last N by start_date if available, else last N match_ids)
+            order_col = None
+            if 'start_date' in self.df.columns:
+                date_map = self.df.groupby('match_id')['start_date'].first()
+                inn['_order'] = inn['match_id'].map(date_map)
+                order_col = '_order'
+            recent_mids = []
+            if order_col:
+                ordered = inn[['match_id', order_col]].drop_duplicates('match_id').sort_values(order_col, ascending=False)
+                recent_mids = ordered['match_id'].head(n_recent).tolist()
+            else:
+                recent_mids = list(inn['match_id'].drop_duplicates().tail(n_recent))
+
+            recent = []
+            for mid in recent_mids:
+                g = inn[inn['match_id'] == mid]
+                if g['innings'].nunique() < 2:
+                    continue
+                g1 = g[g['innings'] == 1].iloc[0]
+                g2 = g[g['innings'] == 2].iloc[0]
+                date_str = ''
+                if order_col:
+                    try:
+                        date_str = str(g[order_col].iloc[0])[:10]
+                    except Exception:
+                        date_str = ''
+                recent.append({
+                    'match_id': str(mid),
+                    'date': date_str,
+                    'team1': str(g1['batting_team']),
+                    'team2': str(g2['batting_team']),
+                    'winner': str(g1.get('winner') or ''),
+                    'team1_phases': {p: {'runs': int(g1[f'{p}_runs']), 'wkts': int(g1[f'{p}_wkts'])} for p in ['PP1', 'PP2', 'PP3', 'PP4']},
+                    'team2_phases': {p: {'runs': int(g2[f'{p}_runs']), 'wkts': int(g2[f'{p}_wkts'])} for p in ['PP1', 'PP2', 'PP3', 'PP4']},
+                    'team1_total': int(g1['total_runs']),
+                    'team2_total': int(g2['total_runs']),
+                    'team1_wkts': int(g1['total_wkts']),
+                    'team2_wkts': int(g2['total_wkts']),
+                })
+            result['recent_matches'] = recent
+
+            # ---- Phase specialists: top batters & bowlers per phase ----
+            try:
+                # Min thresholds keep cameos out of leaderboards
+                MIN_BAT_BALLS = 15
+                MIN_BOWL_BALLS = 30
+                top_n = 10
+
+                bat_grp = df.groupby(['batsman', 'phase'], observed=True).agg(
+                    runs=('runs_of_bat', 'sum'),
+                    balls=('runs_of_bat', 'size'),
+                    fours=('isFour', 'sum'),
+                    sixes=('isSix', 'sum'),
+                    innings=('match_id', 'nunique'),
+                ).reset_index()
+
+                bowl_grp = df.groupby(['bowler', 'phase'], observed=True).agg(
+                    runs=('total_run', 'sum'),
+                    balls=('isBowlerWk', 'size'),
+                    wickets=('isBowlerWk', 'sum'),
+                    dots=('isDot', 'sum'),
+                    innings=('match_id', 'nunique'),
+                ).reset_index()
+
+                specialists = {}
+                for p in ['PP1', 'PP2', 'PP3', 'PP4']:
+                    # Batters: rank by SR among those with enough balls; tie-break by runs
+                    bb = bat_grp[(bat_grp['phase'] == p) & (bat_grp['balls'] >= MIN_BAT_BALLS)].copy()
+                    bb['SR'] = (bb['runs'] / bb['balls'] * 100).round(2)
+                    bb['boundary_pct'] = ((bb['fours'] + bb['sixes']) / bb['balls'] * 100).round(2)
+                    bb = bb.sort_values(['SR', 'runs'], ascending=[False, False]).head(top_n)
+                    bat_list = [{
+                        'name': str(r['batsman']),
+                        'innings': int(r['innings']),
+                        'runs': int(r['runs']),
+                        'balls': int(r['balls']),
+                        'SR': float(r['SR']),
+                        'boundary_pct': float(r['boundary_pct']),
+                    } for _, r in bb.iterrows()]
+
+                    # Bowlers: rank by economy among those with enough balls; tie-break by wickets desc
+                    bw = bowl_grp[(bowl_grp['phase'] == p) & (bowl_grp['balls'] >= MIN_BOWL_BALLS)].copy()
+                    bw['ECO'] = (bw['runs'] / (bw['balls'] / 6.0)).round(2)
+                    bw['dot_pct'] = (bw['dots'] / bw['balls'] * 100).round(2)
+                    bw = bw.sort_values(['ECO', 'wickets'], ascending=[True, False]).head(top_n)
+                    bowl_list = [{
+                        'name': str(r['bowler']),
+                        'innings': int(r['innings']),
+                        'balls': int(r['balls']),
+                        'runs': int(r['runs']),
+                        'wickets': int(r['wickets']),
+                        'ECO': float(r['ECO']),
+                        'dot_pct': float(r['dot_pct']),
+                    } for _, r in bw.iterrows()]
+
+                    specialists[p] = {'batters': bat_list, 'bowlers': bowl_list}
+                result['specialists'] = specialists
+            except Exception as e:
+                print(f"Error computing phase specialists: {e}")
+                result['specialists'] = None
+
+            return result
+        except Exception as e:
+            print(f"Error in get_phase_analysis: {e}")
+            import traceback; traceback.print_exc()
+            return None
+
+    def get_team_vs_team(self, team_a, team_b, venue=None, innings_filter=None, last_n=5, top_n=10):
+        """Head-to-head between two teams: overall, per-venue, last N matches, top scorers/wicket-takers."""
+        try:
+            df = self.df
+            pair_mask = (
+                ((df['batting_team'] == team_a) & (df['bowling_team'] == team_b)) |
+                ((df['batting_team'] == team_b) & (df['bowling_team'] == team_a))
+            )
+            df = df[pair_mask]
+            if venue:
+                df = df[df['venue'] == venue]
+            if innings_filter in [1, 2]:
+                df_inn = df[df['innings'] == innings_filter]
+            else:
+                df_inn = df
+
+            if df.empty:
+                return None
+
+            # Per-match innings totals (use df, not df_inn, so winner can be derived from both innings)
+            inn_totals = df.groupby(['match_id', 'innings', 'batting_team', 'bowling_team', 'venue', 'start_date'],
+                                    observed=True)['total_runs'].sum().reset_index()
+
+            # Build match-level records
+            matches = {}
+            for _, r in inn_totals.iterrows():
+                mid = r['match_id']
+                if mid not in matches:
+                    matches[mid] = {'venue': str(r['venue']), 'date': str(r['start_date']), 'innings': {}}
+                matches[mid]['innings'][int(r['innings'])] = {
+                    'batting_team': str(r['batting_team']),
+                    'bowling_team': str(r['bowling_team']),
+                    'runs': int(r['total_runs'])
+                }
+
+            a_wins = b_wins = no_result = 0
+            a_runs_total = a_innings_count = 0
+            b_runs_total = b_innings_count = 0
+            match_rows = []
+            per_venue = {}
+            for mid, m in matches.items():
+                inn1 = m['innings'].get(1); inn2 = m['innings'].get(2)
+                if not inn1 or not inn2:
+                    no_result += 1
+                    continue
+                # Determine winner by score (assume completed: higher total wins)
+                if inn1['runs'] > inn2['runs']:
+                    winner = inn1['batting_team']; margin = f"{inn1['runs']-inn2['runs']} runs"
+                elif inn2['runs'] > inn1['runs']:
+                    winner = inn2['batting_team']; margin = "by chasing"
+                else:
+                    winner = 'Tie'; margin = 'Tie'
+                # Aggregate runs by team
+                for inn in (inn1, inn2):
+                    if inn['batting_team'] == team_a:
+                        a_runs_total += inn['runs']; a_innings_count += 1
+                    elif inn['batting_team'] == team_b:
+                        b_runs_total += inn['runs']; b_innings_count += 1
+                if winner == team_a: a_wins += 1
+                elif winner == team_b: b_wins += 1
+                v = m['venue']
+                per_venue.setdefault(v, {'matches': 0, 'a_wins': 0, 'b_wins': 0})
+                per_venue[v]['matches'] += 1
+                if winner == team_a: per_venue[v]['a_wins'] += 1
+                elif winner == team_b: per_venue[v]['b_wins'] += 1
+                match_rows.append({
+                    'match_id': str(mid),
+                    'date': str(m['date']),
+                    'venue': m['venue'],
+                    'team1': inn1['batting_team'],
+                    'team1_score': inn1['runs'],
+                    'team2': inn2['batting_team'],
+                    'team2_score': inn2['runs'],
+                    'winner': winner,
+                    'margin': margin,
+                })
+            completed = a_wins + b_wins + (sum(1 for r in match_rows if r['winner'] == 'Tie'))
+
+            match_rows.sort(key=lambda r: r['date'], reverse=True)
+            recent = match_rows[:last_n]
+
+            venue_breakdown = sorted([
+                {'venue': v, **d} for v, d in per_venue.items()
+            ], key=lambda r: -r['matches'])
+
+            # Top run scorers (use df_inn so innings filter applies)
+            runs_by_bat = df_inn.groupby(['batsman', 'batting_team'], observed=True).agg(
+                runs=('runs_of_bat', 'sum'),
+                balls=('runs_of_bat', 'size'),
+                innings=('match_id', 'nunique'),
+            ).reset_index().sort_values('runs', ascending=False).head(top_n)
+            top_scorers = []
+            for _, r in runs_by_bat.iterrows():
+                balls = int(r['balls'])
+                runs = int(r['runs'])
+                top_scorers.append({
+                    'name': str(r['batsman']),
+                    'team': str(r['batting_team']),
+                    'innings': int(r['innings']),
+                    'runs': runs,
+                    'balls': balls,
+                    'sr': round(runs * 100.0 / balls, 2) if balls else 0.0,
+                    'avg': round(runs / int(r['innings']), 2) if r['innings'] else 0.0,
+                })
+
+            # Top wicket takers
+            wk_by_bowl = df_inn.groupby(['bowler', 'bowling_team'], observed=True).agg(
+                wickets=('isBowlerWk', 'sum'),
+                runs=('total_run', 'sum'),
+                balls=('isBowlerWk', 'size'),
+                innings=('match_id', 'nunique'),
+            ).reset_index().sort_values('wickets', ascending=False).head(top_n)
+            top_wickets = []
+            for _, r in wk_by_bowl.iterrows():
+                w = int(r['wickets']); b = int(r['balls']); rn = int(r['runs'])
+                top_wickets.append({
+                    'name': str(r['bowler']),
+                    'team': str(r['bowling_team']),
+                    'innings': int(r['innings']),
+                    'wickets': w,
+                    'balls': b,
+                    'runs': rn,
+                    'eco': round(rn / (b / 6.0), 2) if b else 0.0,
+                    'avg': round(rn / w, 2) if w else 0.0,
+                })
+
+            return {
+                'team_a': team_a,
+                'team_b': team_b,
+                'venue': venue,
+                'innings_filter': innings_filter,
+                'overall': {
+                    'matches': len(match_rows) + no_result,
+                    'completed': completed,
+                    'a_wins': a_wins,
+                    'b_wins': b_wins,
+                    'no_result': no_result,
+                    'a_win_pct': round(a_wins * 100.0 / completed, 2) if completed else 0.0,
+                    'b_win_pct': round(b_wins * 100.0 / completed, 2) if completed else 0.0,
+                    'a_avg_score': round(a_runs_total / a_innings_count, 2) if a_innings_count else 0.0,
+                    'b_avg_score': round(b_runs_total / b_innings_count, 2) if b_innings_count else 0.0,
+                },
+                'venue_breakdown': venue_breakdown,
+                'recent_matches': recent,
+                'top_scorers': top_scorers,
+                'top_wickets': top_wickets,
+            }
+        except Exception as e:
+            print(f"Error in get_team_vs_team: {e}")
+            import traceback; traceback.print_exc()
+            return None
+
+    def get_winning_patterns(self, team, venue=None):
+        """Score-bucket win patterns for a team: batting first and chasing."""
+        try:
+            df = self.df
+            if venue:
+                df = df[df['venue'] == venue]
+            # Only matches involving team
+            team_match_ids = df[(df['batting_team'] == team) | (df['bowling_team'] == team)]['match_id'].unique()
+            df = df[df['match_id'].isin(team_match_ids)]
+            if df.empty:
+                return None
+
+            inn_totals = df.groupby(['match_id', 'innings', 'batting_team'], observed=True)['total_runs'].sum().reset_index()
+
+            buckets = [(0, 119, '<120'), (120, 149, '120-149'), (150, 179, '150-179'),
+                       (180, 199, '180-199'), (200, 10**9, '200+')]
+
+            bat_first_rows = {b[2]: {'matches': 0, 'wins': 0, 'losses': 0} for b in buckets}
+            chase_rows = {b[2]: {'matches': 0, 'wins': 0, 'losses': 0} for b in buckets}
+
+            # Highlights
+            hl_180_bat = {'matches': 0, 'wins': 0}
+            hl_200_bat = {'matches': 0, 'wins': 0}
+            hl_180_chase = {'matches': 0, 'wins': 0}
+
+            matches = {}
+            for _, r in inn_totals.iterrows():
+                mid = r['match_id']
+                matches.setdefault(mid, {})[int(r['innings'])] = {'team': str(r['batting_team']), 'runs': int(r['total_runs'])}
+
+            total_played = wins_overall = 0
+            for mid, m in matches.items():
+                i1 = m.get(1); i2 = m.get(2)
+                if not i1 or not i2:
+                    continue
+                if team not in (i1['team'], i2['team']):
+                    continue
+                total_played += 1
+                # Winner = higher score
+                if i1['runs'] > i2['runs']: winner = i1['team']
+                elif i2['runs'] > i1['runs']: winner = i2['team']
+                else: winner = None
+                won = (winner == team)
+                if won: wins_overall += 1
+
+                # Team batting first?
+                if i1['team'] == team:
+                    score = i1['runs']
+                    for lo, hi, label in buckets:
+                        if lo <= score <= hi:
+                            bat_first_rows[label]['matches'] += 1
+                            if won: bat_first_rows[label]['wins'] += 1
+                            else: bat_first_rows[label]['losses'] += 1
+                            break
+                    if score >= 180:
+                        hl_180_bat['matches'] += 1
+                        if won: hl_180_bat['wins'] += 1
+                    if score >= 200:
+                        hl_200_bat['matches'] += 1
+                        if won: hl_200_bat['wins'] += 1
+                else:
+                    # Team chasing; target = i1.runs + 1
+                    target = i1['runs'] + 1
+                    for lo, hi, label in buckets:
+                        if lo <= target <= hi:
+                            chase_rows[label]['matches'] += 1
+                            if won: chase_rows[label]['wins'] += 1
+                            else: chase_rows[label]['losses'] += 1
+                            break
+                    if target >= 180:
+                        hl_180_chase['matches'] += 1
+                        if won: hl_180_chase['wins'] += 1
+
+            def _finalize(rows):
+                out = []
+                for _, _, label in buckets:
+                    d = rows[label]
+                    m = d['matches']
+                    d_out = dict(d)
+                    d_out['bucket'] = label
+                    d_out['win_pct'] = round(d['wins'] * 100.0 / m, 2) if m else 0.0
+                    out.append(d_out)
+                return out
+
+            def _pct(d):
+                return round(d['wins'] * 100.0 / d['matches'], 2) if d['matches'] else 0.0
+
+            return {
+                'team': team,
+                'venue': venue,
+                'matches_played': total_played,
+                'wins_overall': wins_overall,
+                'win_pct_overall': round(wins_overall * 100.0 / total_played, 2) if total_played else 0.0,
+                'bat_first': _finalize(bat_first_rows),
+                'chase': _finalize(chase_rows),
+                'highlights': {
+                    'bat_180_plus': {**hl_180_bat, 'win_pct': _pct(hl_180_bat)},
+                    'bat_200_plus': {**hl_200_bat, 'win_pct': _pct(hl_200_bat)},
+                    'chase_180_plus': {**hl_180_chase, 'win_pct': _pct(hl_180_chase)},
+                },
+            }
+        except Exception as e:
+            print(f"Error in get_winning_patterns: {e}")
+            import traceback; traceback.print_exc()
+            return None
+
     def get_data_summary(self):
         """Get summary of loaded data for verification"""
         try:
             total_matches = self.df['match_id'].nunique()
             total_players = self.df['batsman'].nunique()
             total_balls = len(self.df)
-            
+
             player_match_counts = self.df.groupby('batsman')['match_id'].nunique().sort_values(ascending=False)
-            
+
             return {
                 'total_matches': total_matches,
-                'total_players': total_players, 
+                'total_players': total_players,
                 'total_balls': total_balls,
                 'avg_matches_per_player': round(player_match_counts.mean(), 2),
                 'max_matches_per_player': player_match_counts.max(),

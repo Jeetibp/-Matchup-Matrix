@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid px-1 px-md-4">
+  <h2 class="mb-1 mt-3">🎯 Phase Analysis</h2>
+  <p class="text-muted mb-4">
+    <span class="badge" style="background-color:#dc3545">PP1: Overs 1–6 (Powerplay)</span>
+    <span class="badge" style="background-color:#ffc107;color:#000">PP2: Overs 7–10 (Middle 1)</span>
+    <span class="badge" style="background-color:#fd7e14">PP3: Overs 11–15 (Middle 2)</span>
+    <span class="badge" style="background-color:#198754">PP4: Overs 16–20 (Death)</span>
+  </p>
+
+  {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+  {% endif %}
+
+  <!-- Filter Form -->
+  <form method="get" class="mb-4">
+    <div class="row g-2">
+      <div class="col-md-4 col-12 mb-2 mb-md-0">
+        <select name="venue" class="form-select">
+          <option value="">-- All Venues --</option>
+          {% for v in venues %}
+            <option value="{{ v }}" {% if selected_venue == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-12 mb-2 mb-md-0">
+        <div class="dropdown w-100">
+          <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {% if not selected_seasons %}All Seasons{% elif selected_seasons|length == 1 %}{{ selected_seasons[0] }}{% else %}{{ selected_seasons|length }} seasons{% endif %}
+          </button>
+          <ul class="dropdown-menu p-2" style="max-height:300px;overflow-y:auto;min-width:100%">
+            <li class="mb-1"><button type="button" class="btn btn-sm btn-outline-secondary w-100" id="season-clear-btn">Clear All</button></li>
+            {% for s in seasons %}
+            <li><label class="dropdown-item d-flex align-items-center" style="cursor:pointer">
+              <input type="checkbox" class="form-check-input me-2 season-cb" value="{{ s }}" {% if s in selected_seasons %}checked{% endif %}>{{ s }}
+            </label></li>
+            {% endfor %}
+          </ul>
+          <div id="season-hidden-container">
+            {% for s in selected_seasons %}<input type="hidden" name="season" value="{{ s }}">{% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-12 mb-2 mb-md-0">
+        <select name="team" class="form-select">
+          <option value="">-- All Teams --</option>
+          {% for t in teams %}
+            <option value="{{ t }}" {% if selected_team == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1 col-12">
+        <button class="btn btn-primary w-100" type="submit">Analyze</button>
+      </div>
+      <div class="col-md-1 col-12">
+        <a class="btn btn-warning w-100 fw-bold" href="/phasestats{% if league %}?league={{ league }}{% endif %}" title="Clear all filters">
+          <i class="fas fa-sync-alt"></i> Clear
+        </a>
+      </div>
+    </div>
+  </form>
+
+  {% if phase_result %}
+    {% set po = phase_result.phase_overall %}
+
+    <!-- Overall Phase Averages -->
+    <div class="card mb-4 shadow-lg">
+      <div class="card-header bg-dark text-white">
+        <h5 class="mb-0"><i class="fas fa-chart-bar"></i>
+          Phase Averages
+          {% if phase_result.venue %} @ {{ phase_result.venue }}{% endif %}
+          {% if phase_result.team %} — {{ phase_result.team }}{% endif %}
+          <span class="badge bg-light text-dark ms-2">{{ po.matches }} matches · {{ po.innings_count }} innings</span>
+        </h5>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          {% for p, color in [('PP1','#dc3545'), ('PP2','#ffc107'), ('PP3','#fd7e14'), ('PP4','#198754')] %}
+          <div class="col-md-3 col-6 mb-2">
+            <div class="card" style="border:2px solid {{ color }}">
+              <div class="card-header text-white" style="background-color:{{ color }}; {% if p == 'PP2' %}color:#000 !important;{% endif %}">
+                <strong>{{ p }}</strong>
+                {% if p == 'PP1' %} (1–6){% elif p == 'PP2' %} (7–10){% elif p == 'PP3' %} (11–15){% else %} (16–20){% endif %}
+              </div>
+              <div class="card-body">
+                <h3 class="mb-0">{{ po[p].avg_runs }}</h3>
+                <small class="text-muted">avg runs</small>
+                <div class="mt-2">
+                  <span class="badge bg-secondary">{{ po[p].avg_wkts }} avg wkts</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {% if phase_result.team_summary %}
+      {% set ts = phase_result.team_summary %}
+      <!-- Team Summary: Win vs Loss -->
+      <div class="card mb-4 shadow-lg">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><i class="fas fa-trophy"></i> {{ ts.team }} — Performance Summary
+            <span class="badge bg-light text-dark ms-2">{{ ts.innings }} innings</span>
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="row text-center mb-3">
+            <div class="col-md-3 col-6"><h6 class="text-muted">Matches</h6><h4>{{ ts.matches_with_result }}</h4></div>
+            <div class="col-md-3 col-6"><h6 class="text-muted">Wins</h6><h4 class="text-success">{{ ts.wins }}</h4></div>
+            <div class="col-md-3 col-6"><h6 class="text-muted">Losses</h6><h4 class="text-danger">{{ ts.losses }}</h4></div>
+            <div class="col-md-3 col-6"><h6 class="text-muted">Win %</h6><h4><span class="badge bg-info">{{ ts.win_pct }}%</span></h4></div>
+          </div>
+          <div class="row text-center mb-3">
+            <div class="col-md-4 col-6"><h6 class="text-muted">Highest Score</h6><h4 class="text-success">{{ ts.highest_score }}</h4></div>
+            <div class="col-md-4 col-6"><h6 class="text-muted">Average Score</h6><h4>{{ ts.avg_score }}</h4></div>
+            <div class="col-md-4 col-12"><h6 class="text-muted">Lowest Score</h6><h4 class="text-danger">{{ ts.lowest_score }}</h4></div>
+          </div>
+
+          <h6 class="mt-3">Phase-wise Averages (Win vs Loss)</h6>
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm text-center align-middle">
+              <thead class="table-dark">
+                <tr>
+                  <th>Scenario</th>
+                  <th style="background-color:#dc3545;color:#fff">PP1</th>
+                  <th style="background-color:#ffc107;color:#000">PP2</th>
+                  <th style="background-color:#fd7e14;color:#fff">PP3</th>
+                  <th style="background-color:#198754;color:#fff">PP4</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="table-success">
+                  <th>🏆 When Winning</th>
+                  {% for p in ['PP1','PP2','PP3','PP4'] %}
+                    <td><strong>{{ ts.avg_when_winning[p].avg_runs }}</strong> / {{ ts.avg_when_winning[p].avg_wkts }}w</td>
+                  {% endfor %}
+                </tr>
+                <tr class="table-danger">
+                  <th>💔 When Losing</th>
+                  {% for p in ['PP1','PP2','PP3','PP4'] %}
+                    <td><strong>{{ ts.avg_when_losing[p].avg_runs }}</strong> / {{ ts.avg_when_losing[p].avg_wkts }}w</td>
+                  {% endfor %}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <small class="text-muted">Format: avg runs / avg wickets lost in each phase.</small>
+
+          <h6 class="mt-4">Phase-wise Averages (Batting 1st vs 2nd)</h6>
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm text-center align-middle">
+              <thead class="table-dark">
+                <tr>
+                  <th>Scenario</th>
+                  <th style="background-color:#dc3545;color:#fff">PP1</th>
+                  <th style="background-color:#ffc107;color:#000">PP2</th>
+                  <th style="background-color:#fd7e14;color:#fff">PP3</th>
+                  <th style="background-color:#198754;color:#fff">PP4</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="table-primary">
+                  <th>🥇 Batting 1st <span class="badge bg-secondary">{{ ts.innings_first_count }} inn</span></th>
+                  {% for p in ['PP1','PP2','PP3','PP4'] %}
+                    <td><strong>{{ ts.avg_batting_first[p].avg_runs }}</strong> / {{ ts.avg_batting_first[p].avg_wkts }}w</td>
+                  {% endfor %}
+                </tr>
+                <tr class="table-warning">
+                  <th>🥈 Batting 2nd (Chasing) <span class="badge bg-secondary">{{ ts.innings_second_count }} inn</span></th>
+                  {% for p in ['PP1','PP2','PP3','PP4'] %}
+                    <td><strong>{{ ts.avg_batting_second[p].avg_runs }}</strong> / {{ ts.avg_batting_second[p].avg_wkts }}w</td>
+                  {% endfor %}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <small class="text-muted">Format: avg runs / avg wickets lost in each phase.</small>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if phase_result.team_breakdown %}
+      <!-- Per-Team Breakdown -->
+      <div class="card mb-4 shadow-lg">
+        <div class="card-header bg-info text-white">
+          <h5 class="mb-0"><i class="fas fa-users"></i> Per-Team Phase Averages</h5>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-striped table-hover table-sm align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th>Team</th>
+                <th class="text-center">Innings</th>
+                <th class="text-center" style="background-color:#dc3545;color:#fff">PP1</th>
+                <th class="text-center" style="background-color:#ffc107;color:#000">PP2</th>
+                <th class="text-center" style="background-color:#fd7e14;color:#fff">PP3</th>
+                <th class="text-center" style="background-color:#198754;color:#fff">PP4</th>
+                <th class="text-center">Avg Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in phase_result.team_breakdown %}
+              <tr>
+                <td>{{ r.team }}</td>
+                <td class="text-center">{{ r.innings }}</td>
+                <td class="text-center">{{ r.PP1 }}</td>
+                <td class="text-center">{{ r.PP2 }}</td>
+                <td class="text-center">{{ r.PP3 }}</td>
+                <td class="text-center">{{ r.PP4 }}</td>
+                <td class="text-center"><strong>{{ r.avg_total }}</strong></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if phase_result.specialists %}
+      {% set phase_meta = [('PP1','Powerplay (Overs 1–6)','#dc3545','#fff'), ('PP2','Middle 1 (Overs 7–10)','#ffc107','#000'), ('PP3','Middle 2 (Overs 11–15)','#fd7e14','#fff'), ('PP4','Death (Overs 16–20)','#198754','#fff')] %}
+      <div class="card mb-4 shadow-lg">
+        <div class="card-header bg-dark text-white">
+          <h5 class="mb-0"><i class="fas fa-star"></i> Phase Specialists — Top 10 by Phase</h5>
+          <small class="text-light">Batters ranked by Strike Rate (min 15 balls), bowlers by Economy (min 30 balls) in phase.</small>
+        </div>
+        <div class="card-body">
+          <ul class="nav nav-tabs mb-3" role="tablist">
+            {% for code, label, bg, fg in phase_meta %}
+            <li class="nav-item" role="presentation">
+              <button class="nav-link {% if loop.first %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-{{ code }}" type="button" role="tab" style="background-color: {% if loop.first %}{{ bg }}{% endif %}; color: {% if loop.first %}{{ fg }}{% endif %};">{{ label }}</button>
+            </li>
+            {% endfor %}
+          </ul>
+          <div class="tab-content">
+            {% for code, label, bg, fg in phase_meta %}
+            {% set sp = phase_result.specialists.get(code) %}
+            <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="tab-{{ code }}" role="tabpanel">
+              <div class="row g-3">
+                <div class="col-lg-6">
+                  <div class="card h-100">
+                    <div class="card-header text-center fw-bold" style="background:{{ bg }};color:{{ fg }};">🏏 Top Batters — {{ label }}</div>
+                    <div class="card-body table-responsive p-0">
+                      <table class="table table-striped mb-0 table-sticky-col">
+                        <thead class="table-dark"><tr><th>#</th><th>Batsman</th><th>Inn</th><th>Runs</th><th>Balls</th><th>SR</th><th>4s+6s%</th></tr></thead>
+                        <tbody>
+                          {% for b in sp.batters %}
+                          <tr><td>{{ loop.index }}</td><td><strong>{{ b.name }}</strong></td><td>{{ b.innings }}</td><td>{{ b.runs }}</td><td>{{ b.balls }}</td><td><span class="badge bg-success">{{ b.SR }}</span></td><td>{{ b.boundary_pct }}%</td></tr>
+                          {% else %}
+                          <tr><td colspan="7" class="text-center text-muted">Not enough data</td></tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="card h-100">
+                    <div class="card-header text-center fw-bold" style="background:{{ bg }};color:{{ fg }};">🎯 Top Bowlers — {{ label }}</div>
+                    <div class="card-body table-responsive p-0">
+                      <table class="table table-striped mb-0 table-sticky-col">
+                        <thead class="table-dark"><tr><th>#</th><th>Bowler</th><th>Inn</th><th>Wkts</th><th>Balls</th><th>Runs</th><th>Eco</th><th>Dot%</th></tr></thead>
+                        <tbody>
+                          {% for w in sp.bowlers %}
+                          <tr><td>{{ loop.index }}</td><td><strong>{{ w.name }}</strong></td><td>{{ w.innings }}</td><td>{{ w.wickets }}</td><td>{{ w.balls }}</td><td>{{ w.runs }}</td><td><span class="badge bg-primary">{{ w.ECO }}</span></td><td>{{ w.dot_pct }}%</td></tr>
+                          {% else %}
+                          <tr><td colspan="8" class="text-center text-muted">Not enough data</td></tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if phase_result.recent_matches %}
+      <!-- Recent Matches Phase Breakdown -->
+      <div class="card mb-4 shadow-lg">
+        <div class="card-header bg-secondary text-white">
+          <h5 class="mb-0"><i class="fas fa-history"></i> Recent Matches — Phase Breakdown</h5>
+        </div>
+        <div class="card-body table-responsive">
+          <table class="table table-bordered table-sm align-middle">
+            <thead class="table-dark text-center">
+              <tr>
+                <th rowspan="2" class="align-middle">Date</th>
+                <th rowspan="2" class="align-middle">Team</th>
+                <th colspan="4" style="background-color:#212529">Phase Runs / Wickets</th>
+                <th rowspan="2" class="align-middle">Total</th>
+                <th rowspan="2" class="align-middle">Result</th>
+              </tr>
+              <tr>
+                <th style="background-color:#dc3545;color:#fff">PP1</th>
+                <th style="background-color:#ffc107;color:#000">PP2</th>
+                <th style="background-color:#fd7e14;color:#fff">PP3</th>
+                <th style="background-color:#198754;color:#fff">PP4</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in phase_result.recent_matches %}
+                {% set t1_win = (m.winner == m.team1) %}
+                {% set t2_win = (m.winner == m.team2) %}
+                <tr class="{% if t1_win %}table-success{% endif %}">
+                  <td rowspan="2" class="align-middle text-center">{{ m.date or m.match_id }}</td>
+                  <td><strong>{{ m.team1 }}</strong> {% if t1_win %}<span class="badge bg-success">W</span>{% endif %}</td>
+                  {% for p in ['PP1','PP2','PP3','PP4'] %}
+                    <td class="text-center">{{ m.team1_phases[p].runs }}/{{ m.team1_phases[p].wkts }}</td>
+                  {% endfor %}
+                  <td class="text-center"><strong>{{ m.team1_total }}/{{ m.team1_wkts }}</strong></td>
+                  <td rowspan="2" class="align-middle text-center">
+                    {% if m.winner %}
+                      <span class="badge bg-primary">{{ m.winner }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                <tr class="{% if t2_win %}table-success{% endif %}">
+                  <td><strong>{{ m.team2 }}</strong> {% if t2_win %}<span class="badge bg-success">W</span>{% endif %}</td>
+                  {% for p in ['PP1','PP2','PP3','PP4'] %}
+                    <td class="text-center">{{ m.team2_phases[p].runs }}/{{ m.team2_phases[p].wkts }}</td>
+                  {% endfor %}
+                  <td class="text-center"><strong>{{ m.team2_total }}/{{ m.team2_wkts }}</strong></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <small class="text-muted">Cell format: runs/wickets. Winner row highlighted green.</small>
+        </div>
+      </div>
+    {% endif %}
+
+  {% else %}
+    <div class="alert alert-info">
+      <i class="fas fa-info-circle"></i> Select a <strong>Venue</strong>, <strong>Team</strong>, or <strong>Season</strong> above and click <em>Analyze</em> to see phase-wise breakdown.
+    </div>
+  {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function syncSeasonDD() {
+        const cbs = document.querySelectorAll('.season-cb');
+        const selected = Array.from(cbs).filter(c => c.checked).map(c => c.value);
+        const btn = document.getElementById('season-dd-btn');
+        if (btn) {
+            btn.textContent = selected.length === 0 ? 'All Seasons'
+                : (selected.length === 1 ? selected[0] : `${selected.length} seasons`);
+        }
+        const container = document.getElementById('season-hidden-container');
+        if (container) {
+            container.innerHTML = selected.map(s => `<input type="hidden" name="season" value="${s}">`).join('');
+        }
+    }
+    document.querySelectorAll('.season-cb').forEach(cb => cb.addEventListener('change', syncSeasonDD));
+    const clearSeasonBtn = document.getElementById('season-clear-btn');
+    if (clearSeasonBtn) {
+        clearSeasonBtn.addEventListener('click', function() {
+            document.querySelectorAll('.season-cb').forEach(cb => cb.checked = false);
+            syncSeasonDD();
+        });
+    }
+});
+</script>
+{% endblock %}
