@@ -66,6 +66,45 @@ def get_aliases_for_league(league):
     merged.update(PLAYER_ALIASES.get(league, {}))
     return merged
 
+# --- Venue mapping: normalise variant/old names to a canonical name ---
+def _load_venue_mapping():
+    try:
+        import json
+        p = Path('data/venue_mapping.json')
+        if p.exists():
+            with open(p, encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Could not load venue mapping: {e}")
+    return {}
+
+VENUE_MAPPING = _load_venue_mapping()
+
+def get_venue_map(league):
+    """Return {variant: canonical} for the given league."""
+    return dict(VENUE_MAPPING.get(league, {}))
+
+def get_canonical_venue(venue, venue_map):
+    """Return the canonical name for a venue (or the original if not mapped)."""
+    return venue_map.get(venue, venue)
+
+def get_venue_variants(canonical, venue_map):
+    """Return all dataset names (including canonical) that resolve to the same canonical."""
+    variants = {canonical}
+    for variant, canon in venue_map.items():
+        if canon == canonical:
+            variants.add(variant)
+    return variants
+
+def _apply_venue_normalization(analytics_obj, league):
+    """Normalize venue names in analytics.df in-place using venue_mapping.json."""
+    try:
+        vm = get_venue_map(league)
+        if vm and analytics_obj is not None and hasattr(analytics_obj, 'df'):
+            analytics_obj.df['venue'] = analytics_obj.df['venue'].map(lambda v: vm.get(v, v) if isinstance(v, str) else v)
+    except Exception as e:
+        print(f"Venue normalization failed for {league}: {e}")
+
 # --- Pickle helpers ---
 def _get_pickle_path(league):
     return PICKLE_CACHE_DIR / f'{league}.pkl'
@@ -124,6 +163,7 @@ def _warmup_all_leagues():
                     a = CricketAnalytics(csv_path)
                     _save_to_pickle(league_key, a)
                 if a:
+                    _apply_venue_normalization(a, league_key)
                     analytics_cache[league_key] = a
                     print(f"Warmup done: {league_key}")
             except Exception as e:
@@ -176,6 +216,7 @@ def get_analytics():
                         print(f"Loading cricket analytics for {league}...")
                         analytics = CricketAnalytics(csv_path)
                         _save_to_pickle(league, analytics)
+                    _apply_venue_normalization(analytics, league)
                     analytics_cache[league] = analytics
                     gc.collect()
                     print(f"Successfully loaded {league} analytics")
@@ -428,6 +469,30 @@ def headtohead():
 
         if request.method == "POST":
             atype = request.form.get("analysis_type", "single")
+            league_aliases = get_aliases_for_league(league)
+
+            # Pre-build frequency maps: player → number of rows in dataset
+            _bat_freq = analytics.df['batsman'].value_counts().to_dict()
+            _bowl_freq = analytics.df['bowler'].value_counts().to_dict()
+
+            def resolve_player(name, player_list, freq_map):
+                """Resolve via: exact match → alias map → partial match (most frequent wins)."""
+                # 1. Exact match (case-insensitive)
+                for p in player_list:
+                    if p.lower() == name.lower():
+                        return p
+                # 2. Alias map (e.g. "bumrah" → "JJ Bumrah")
+                alias = league_aliases.get(name.lower())
+                if alias:
+                    return alias
+                # 3. Partial match — if multiple, pick the one with the most appearances
+                matches = [p for p in player_list if name.lower() in p.lower()]
+                if len(matches) == 1:
+                    return matches[0]
+                if len(matches) > 1:
+                    return max(matches, key=lambda p: freq_map.get(p, 0))
+                return name
+
             if atype == "single":
                 b = request.form.get("bowler", "").strip()
                 bt = request.form.get("batsman", "").strip()
@@ -435,8 +500,10 @@ def headtohead():
                 session['h2h_inputs']['single_batsman'] = bt
                 session['h2h_inputs']['innings_filter'] = innings_filter
                 if b and bt:
-                    print(f"Processing H2H: {b} vs {bt}")
-                    matchup = analytics.get_head_to_head(b, bt, innings_filter=innings_filter)
+                    b_resolved = resolve_player(b, all_bowlers, _bowl_freq)
+                    bt_resolved = resolve_player(bt, all_batsmen, _bat_freq)
+                    print(f"Processing H2H: {b_resolved} vs {bt_resolved}")
+                    matchup = analytics.get_head_to_head(b_resolved, bt_resolved, innings_filter=innings_filter)
                     if not matchup:
                         message = f"No matchup found for {b} vs {bt} in {'All' if not innings_filter else str(innings_filter)+'st/2nd'} Innings"
                 else:
@@ -448,8 +515,10 @@ def headtohead():
                 session['h2h_inputs']['multiple_batsmen'] = bts
                 session['h2h_inputs']['innings_filter'] = innings_filter
                 if bs and bts:
-                    print(f"Processing multiple H2H: {len(bs)} bowlers vs {len(bts)} batsmen")
-                    multiple = analytics.get_multiple_head_to_head(bs, bts, innings_filter=innings_filter)
+                    bs_resolved = [resolve_player(b, all_bowlers, _bowl_freq) for b in bs]
+                    bts_resolved = [resolve_player(bt, all_batsmen, _bat_freq) for bt in bts]
+                    print(f"Processing multiple H2H: {len(bs_resolved)} bowlers vs {len(bts_resolved)} batsmen")
+                    multiple = analytics.get_multiple_head_to_head(bs_resolved, bts_resolved, innings_filter=innings_filter)
                 else:
                     message = "Select at least one bowler and batsman."
             elif atype == "swap_multiple":
@@ -464,8 +533,22 @@ def headtohead():
                 message = "All inputs cleared!"
         else:
             if saved_inputs["single_bowler"] and saved_inputs["single_batsman"]:
+                _aliases = get_aliases_for_league(league)
+                _bf = analytics.df['bowler'].value_counts().to_dict()
+                _batf = analytics.df['batsman'].value_counts().to_dict()
+                def _resolve(name, player_list, freq_map):
+                    for p in player_list:
+                        if p.lower() == name.lower(): return p
+                    alias = _aliases.get(name.lower())
+                    if alias: return alias
+                    matches = [p for p in player_list if name.lower() in p.lower()]
+                    if len(matches) == 1: return matches[0]
+                    if len(matches) > 1: return max(matches, key=lambda p: freq_map.get(p, 0))
+                    return name
                 matchup = analytics.get_head_to_head(
-                    saved_inputs["single_bowler"], saved_inputs["single_batsman"], innings_filter=saved_inputs.get("innings_filter")
+                    _resolve(saved_inputs["single_bowler"], all_bowlers, _bf),
+                    _resolve(saved_inputs["single_batsman"], all_batsmen, _batf),
+                    innings_filter=saved_inputs.get("innings_filter")
                 )
 
         # Memory cleanup
@@ -599,6 +682,7 @@ def api_player_stats():
         name = request.args.get('name', '').strip()
         ptype = request.args.get('ptype', 'batsman')
         season = request.args.get('season', '').strip()
+        venue = request.args.get('venue', '').strip()
         if not name:
             return jsonify({'error': 'No player name specified.'})
         # Resolve alias: "Virat Kohli" -> "V Kohli" (global + league-specific)
@@ -607,12 +691,19 @@ def api_player_stats():
         if alias:
             name = alias
         try:
-            # Apply season filter — creates a lightweight filtered view, no function changes needed
+            # Apply season + venue filters
+            filtered_df = analytics.df
             if season and season != 'all':
-                filtered = CricketAnalytics.__new__(CricketAnalytics)
-                filtered.df = analytics.df[analytics.df['season'].astype(str) == season].copy()
-                work = filtered
-                work_df = filtered.df
+                filtered_df = filtered_df[filtered_df['season'].astype(str) == season]
+            if venue and venue != 'all':
+                # Expand canonical venue name to all its dataset variants
+                venue_map = get_venue_map(league)
+                venue_variants = get_venue_variants(venue, venue_map)
+                filtered_df = filtered_df[filtered_df['venue'].isin(venue_variants)]
+            if season != 'all' or (venue and venue != 'all'):
+                work = CricketAnalytics.__new__(CricketAnalytics)
+                work.df = filtered_df.copy()
+                work_df = work.df
             else:
                 work = analytics
                 work_df = analytics.df
@@ -636,6 +727,7 @@ def api_player_stats():
                 response = {
                     'resolved_name': name,
                     'matches': int(rec['innings']),
+                    'balls': balls,
                     'runs': int(rec['runs']),
                     'avg': float(round(rec['runs']/rec['innings'],2)) if rec['innings']>0 else "-",
                     'sr': float(rec['SR']),
@@ -666,6 +758,7 @@ def api_player_stats():
                 response = {
                     'resolved_name': name,
                     'matches': int(rec['innings']),
+                    'balls': balls,
                     'wickets': wickets,
                     'avg': float(rec.get('AVG', 0)),
                     'eco': float(rec.get('ECO', 0)),
@@ -700,6 +793,22 @@ def api_get_seasons():
         print(f"Error in get_seasons API: {e}")
         return jsonify({'seasons': [], 'error': str(e)})
 
+@app.route('/api/get_venues')
+def api_get_venues():
+    """API endpoint to get available venues for the selected league, normalised via venue_mapping."""
+    try:
+        analytics, league, error = get_analytics()
+        if not analytics:
+            return jsonify({'venues': []})
+        venue_map = get_venue_map(league)
+        raw_venues = analytics.df['venue'].dropna().astype(str).unique().tolist()
+        # Map each raw venue to its canonical; deduplicate; sort
+        canonical_set = sorted(set(get_canonical_venue(v, venue_map) for v in raw_venues))
+        return jsonify({'venues': canonical_set})
+    except Exception as e:
+        print(f"Error in get_venues API: {e}")
+        return jsonify({'venues': [], 'error': str(e)})
+
 @app.route("/venuestats", methods=["GET"])
 def venuestats():
     """Venue statistics page"""
@@ -709,36 +818,48 @@ def venuestats():
         venues, teams = analytics.get_venue_team_options() if analytics else ([], [])
         selected_venue = request.args.get("venue", "")
         selected_team = request.args.get("team", "")
+        selected_season = request.args.get("season", "all").strip()
         compare_teams = request.args.getlist("compare_teams")
         team_stats = None
         venue_characteristics = None
         team_comparison = None
         venue_records = None
-        
-        if analytics and selected_venue:
+        seasons = []
+
+        if analytics:
+            seasons = sorted(analytics.df['season'].dropna().astype(str).unique().tolist(), reverse=True)
+            if selected_season and selected_season != 'all':
+                work = CricketAnalytics.__new__(CricketAnalytics)
+                work.df = analytics.df[analytics.df['season'].astype(str) == selected_season].copy()
+            else:
+                work = analytics
+        else:
+            work = None
+
+        if work is not None and selected_venue:
             try:
                 print(f"Processing venue stats for {selected_venue}")
                 # Get venue characteristics
-                venue_characteristics = analytics.get_venue_characteristics(selected_venue)
-                
+                venue_characteristics = work.get_venue_characteristics(selected_venue)
+
                 # Get venue records
-                venue_records = analytics.get_venue_records(selected_venue)
-                
+                venue_records = work.get_venue_records(selected_venue)
+
                 # Single team analysis
                 if selected_team:
                     print(f"Processing team performance: {selected_team} at {selected_venue}")
-                    team_stats = analytics.get_venue_team_performance(selected_venue, selected_team)
+                    team_stats = work.get_venue_team_performance(selected_venue, selected_team)
                     if team_stats and team_stats.get('matches', 0) == 0:
                         team_stats = None
-                        
+
                 # Multi-team comparison
                 if compare_teams and len(compare_teams) >= 2:
                     print(f"Processing team comparison: {compare_teams}")
-                    team_comparison = analytics.get_venue_team_comparison(selected_venue, compare_teams)
-                    
+                    team_comparison = work.get_venue_team_comparison(selected_venue, compare_teams)
+
                 # Memory cleanup
                 gc.collect()
-                    
+
             except Exception as e:
                 print(f"Error in venue analysis: {e}")
                 error = f"Error analyzing venue performance: {str(e)}"
@@ -747,8 +868,10 @@ def venuestats():
             "venuestats.html",
             venues=venues,
             teams=teams,
+            seasons=seasons,
             selected_venue=selected_venue,
             selected_team=selected_team,
+            selected_season=selected_season,
             compare_teams=compare_teams,
             team_stats=team_stats,
             venue_characteristics=venue_characteristics,
@@ -764,8 +887,10 @@ def venuestats():
             "venuestats.html",
             venues=[],
             teams=[],
+            seasons=[],
             selected_venue="",
             selected_team="",
+            selected_season="all",
             compare_teams=[],
             team_stats=None,
             venue_characteristics=None,

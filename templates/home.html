@@ -8,7 +8,7 @@
     </div>
     <div class="card-body">
         <form id="player-search-form" autocomplete="off" class="row g-2 align-items-end">
-            <div class="col-md-4 col-12 mb-2 mb-md-0" style="position:relative;">
+            <div class="col-md-3 col-12 mb-2 mb-md-0" style="position:relative;">
                 <input type="text" id="player-search-input" class="form-control" placeholder="e.g. 'Kohli', 'Dhoni', or 'Virat Kohli'..." autocomplete="off">
                 <div id="player-suggestions" class="suggestions-dropdown"></div>
             </div>
@@ -23,12 +23,16 @@
                     <option value="all">All Seasons</option>
                 </select>
             </div>
-            <div class="col-md-2 col-6 mb-2 mb-md-0">
-                <button type="submit" class="btn btn-dark w-100">🔎 Show Stats</button>
+            <div class="col-md-3 col-12 mb-2 mb-md-0">
+                <select id="venue-filter" class="form-select">
+                    <option value="all">All Venues</option>
+                </select>
             </div>
-            <div class="col-md-2 col-12">
-                <!-- Refresh/Clear button -->
-                <button type="button" class="btn btn-outline-secondary w-100" id="refresh-player-search" title="Clear search & input" style="display:none;">⟳ Clear</button>
+            <div class="col-md-1 col-6 mb-2 mb-md-0">
+                <button type="submit" class="btn btn-dark w-100">🔎</button>
+            </div>
+            <div class="col-md-1 col-6">
+                <button type="button" class="btn btn-outline-secondary w-100" id="refresh-player-search" title="Clear search & input" style="display:none;">⟳</button>
             </div>
         </form>
         <div id="player-result-card" class="mt-4"></div>
@@ -130,8 +134,37 @@ function loadSeasons(leagueVal) {
             });
         }).catch(() => {});
 }
-// Populate seasons on page load
-loadSeasons(document.getElementById('league-select') ? document.getElementById('league-select').value : '');
+
+// Load venues for selected league
+function loadVenues(leagueVal) {
+    fetch(`/api/get_venues?league=${encodeURIComponent(leagueVal)}`)
+        .then(r => r.json())
+        .then(data => {
+            const sel = document.getElementById('venue-filter');
+            const prev = sel.value;
+            sel.innerHTML = '<option value="all">All Venues</option>';
+            (data.venues || []).forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v; opt.textContent = v;
+                if (v === prev) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }).catch(() => {});
+}
+
+// Populate seasons and venues on page load
+const _leagueSelEl = document.getElementById('league-select');
+const _initLeague = _leagueSelEl ? _leagueSelEl.value : '';
+loadSeasons(_initLeague);
+loadVenues(_initLeague);
+
+// Reload seasons + venues when league changes
+if (_leagueSelEl) {
+    _leagueSelEl.addEventListener('change', function() {
+        loadSeasons(this.value);
+        loadVenues(this.value);
+    });
+}
 
 // Search form submit (fetch and show player stats)
 document.getElementById('player-search-form').addEventListener('submit', function(e) {
@@ -141,22 +174,25 @@ document.getElementById('player-search-form').addEventListener('submit', functio
     if (!name) return;
     const ptype = document.getElementById('player-type').value;
     const season = document.getElementById('season-filter').value;
-    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}&season=${encodeURIComponent(season)}`)
+    const venue = document.getElementById('venue-filter').value;
+    fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${league}&season=${encodeURIComponent(season)}&venue=${encodeURIComponent(venue)}`)
       .then(r=>r.json())
       .then(data=>{
         let html = '';
         const seasonLabel = (season && season !== 'all') ? `<span class="badge bg-secondary ms-2">Season: ${season}</span>` : '';
+        const venueLabel = (venue && venue !== 'all') ? `<span class="badge bg-info text-dark ms-2" title="${venue}">📍 ${venue.length > 30 ? venue.substring(0,30)+'…' : venue}</span>` : '';
         if (data.error) { html = `<div class='alert alert-danger'>${data.error}</div>`; }
         else if (ptype==='batsman') {
             const resolvedLabel = (data.resolved_name && data.resolved_name.toLowerCase() !== name.toLowerCase())
                 ? `<code class="ms-2 text-muted" style="font-size:0.82em;">${data.resolved_name}</code>` : '';
             html = `<div class='card player-database-card'>
             <button class='btn-close btn-close-quickstats' aria-label='Close' onclick="closePlayerStats()" style="position:absolute;top:8px;right:12px;"></button>
-            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-primary ms-2">Batsman</span>${resolvedLabel}${seasonLabel}</h5>
+            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-primary ms-2">Batsman</span>${resolvedLabel}${seasonLabel}${venueLabel}</h5>
             <div class='row'>
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
               <tr><th>Matches</th><td>${data.matches}</td></tr>
+              <tr><th>Balls</th><td>${data.balls}</td></tr>
               <tr><th>Runs</th><td>${data.runs}</td></tr>
               <tr><th>Average</th><td>${data.avg}</td></tr>
               <tr><th>Strike Rate</th><td>${data.sr}</td></tr>
@@ -179,7 +215,7 @@ document.getElementById('player-search-form').addEventListener('submit', functio
                 ? `<code class="ms-2 text-muted" style="font-size:0.82em;">${data.resolved_name}</code>` : '';
             html = `<div class='card player-database-card'>
             <button class='btn-close btn-close-quickstats' aria-label='Close' onclick="closePlayerStats()" style="position:absolute;top:8px;right:12px;"></button>
-            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-success ms-2">Bowler</span>${resolvedLabel}${seasonLabel}</h5>
+            <h5 class='mb-2'><b>${name}</b> <span class="badge bg-success ms-2">Bowler</span>${resolvedLabel}${seasonLabel}${venueLabel}</h5>
             <div class='row'>
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
@@ -195,8 +231,8 @@ document.getElementById('player-search-form').addEventListener('submit', functio
             </div>
             <div class='col-md-6'>
             <table class='table table-bordered player-stats-table'>
+              <tr><th>Balls</th><td>${data.balls}</td></tr>
               <tr><th>Dot %</th><td>${data.dot_pct}%</td></tr>
-              <tr><th>BPD</th><td>${typeof data.bpd === 'number' && data.bpd !== 0 ? data.bpd.toFixed(2) : '-'}</td></tr>
               <tr><th>BPB</th><td>${typeof data.bpb === 'number' && data.bpb !== 0 ? data.bpb.toFixed(2) : '-'}</td></tr>
             </table>
             </div>
@@ -214,6 +250,7 @@ function closePlayerStats() {
     document.getElementById('player-result-card').innerHTML = '';
     document.getElementById('player-search-input').value = '';
     document.getElementById('player-suggestions').style.display = 'none';
+    document.getElementById('venue-filter').value = 'all';
     refreshBtn.style.display = "none";
 }
 refreshBtn.onclick = closePlayerStats;

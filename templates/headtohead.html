@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block content %}
 
 
@@ -61,27 +61,6 @@
             <input type="hidden" name="league" value="{{ league }}">
             <div class="row mb-3">
                 <div class="col-md-6 col-12 mb-2 mb-md-0">
-                    <label class="form-label">🎯 Select Bowler</label>
-                    <div class="input-mode dropdown-mode">
-                        <select id="bowler_select" name="bowler" class="form-select">
-                            <option value="">-- Choose a Bowler --</option>
-                            {% for b in all_bowlers %}
-                            <option value="{{ b }}" {% if saved_inputs.single_bowler == b %}selected{% endif %}>{{ b }}</option>
-                            {% endfor %}
-                        </select>
-                        <small class="text-muted" id="bowler-status">All bowlers available</small>
-                    </div>
-                    <div class="input-mode keyboard-mode" style="display: none;">
-                        <div class="position-relative">
-                            <input type="text" id="bowler_input" name="bowler" class="form-control autocomplete-input"
-                                   placeholder="Type bowler last name..." value="{{ saved_inputs.single_bowler }}"
-                                   autocomplete="off">
-                            <div id="bowler_suggestions" class="suggestions-dropdown"></div>
-                        </div>
-                        <small class="text-success">✨ Type to search with autocomplete</small>
-                    </div>
-                </div>
-                <div class="col-md-6 col-12">
                     <label class="form-label">🏏 Select Batsman</label>
                     <div class="input-mode dropdown-mode">
                         <select id="batsman_select" name="batsman" class="form-select">
@@ -98,6 +77,27 @@
                                    placeholder="Type batsman last name..." value="{{ saved_inputs.single_batsman }}"
                                    autocomplete="off">
                             <div id="batsman_suggestions" class="suggestions-dropdown"></div>
+                        </div>
+                        <small class="text-success">✨ Type to search with autocomplete</small>
+                    </div>
+                </div>
+                <div class="col-md-6 col-12">
+                    <label class="form-label">🎯 Select Bowler</label>
+                    <div class="input-mode dropdown-mode">
+                        <select id="bowler_select" name="bowler" class="form-select">
+                            <option value="">-- Choose a Bowler --</option>
+                            {% for b in all_bowlers %}
+                            <option value="{{ b }}" {% if saved_inputs.single_bowler == b %}selected{% endif %}>{{ b }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted" id="bowler-status">All bowlers available</small>
+                    </div>
+                    <div class="input-mode keyboard-mode" style="display: none;">
+                        <div class="position-relative">
+                            <input type="text" id="bowler_input" name="bowler" class="form-control autocomplete-input"
+                                   placeholder="Type bowler last name..." value="{{ saved_inputs.single_bowler }}"
+                                   autocomplete="off">
+                            <div id="bowler_suggestions" class="suggestions-dropdown"></div>
                         </div>
                         <small class="text-success">✨ Type to search with autocomplete</small>
                     </div>
@@ -133,27 +133,6 @@
             <input type="hidden" name="league" value="{{ league }}">
             <div class="row mb-3">
                 <div class="col-md-6 col-12 mb-2 mb-md-0">
-                    <label class="form-label">🎯 Multiple Bowlers</label>
-                    <div id="bowlers_container">
-                        {% if saved_inputs.multiple_bowlers %}
-                            {% for bowler in saved_inputs.multiple_bowlers %}
-                            <div class="input-group mb-2">
-                                <input type="text" name="bowlers[]" class="form-control multi-input"
-                                       value="{{ bowler }}" placeholder="Type bowler name..."
-                                       data-type="bowler" autocomplete="off">
-                                <button type="button" class="btn btn-danger remove-input">-</button>
-                            </div>
-                            {% endfor %}
-                        {% endif %}
-                        <div class="input-group mb-2">
-                            <input type="text" name="bowlers[]" class="form-control multi-input"
-                                   placeholder="Type bowler last name..." data-type="bowler" autocomplete="off">
-                            <button type="button" class="btn btn-success add-bowler">+</button>
-                        </div>
-                    </div>
-                    <small class="text-muted" id="multi-bowler-status">Add bowlers to filter batsmen</small>
-                </div>
-                <div class="col-md-6 col-12">
                     <label class="form-label">🏏 Multiple Batsmen</label>
                     <div id="batsmen_container">
                         {% if saved_inputs.multiple_batsmen %}
@@ -173,6 +152,27 @@
                         </div>
                     </div>
                     <small class="text-muted" id="multi-batsman-status">All batsmen available</small>
+                </div>
+                <div class="col-md-6 col-12">
+                    <label class="form-label">🎯 Multiple Bowlers</label>
+                    <div id="bowlers_container">
+                        {% if saved_inputs.multiple_bowlers %}
+                            {% for bowler in saved_inputs.multiple_bowlers %}
+                            <div class="input-group mb-2">
+                                <input type="text" name="bowlers[]" class="form-control multi-input"
+                                       value="{{ bowler }}" placeholder="Type bowler name..."
+                                       data-type="bowler" autocomplete="off">
+                                <button type="button" class="btn btn-danger remove-input">-</button>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                        <div class="input-group mb-2">
+                            <input type="text" name="bowlers[]" class="form-control multi-input"
+                                   placeholder="Type bowler last name..." data-type="bowler" autocomplete="off">
+                            <button type="button" class="btn btn-success add-bowler">+</button>
+                        </div>
+                    </div>
+                    <small class="text-muted" id="multi-bowler-status">Add bowlers to filter batsmen</small>
                 </div>
             </div>
             <button type="submit" class="btn btn-warning btn-lg">📊 Analyze Multiple Matchups</button>

@@ -1,0 +1,120 @@
+{
+  "_comment": "Maps variant/old venue names to a single canonical name per league. Edit canonical values to your preference.",
+
+  "ipl": {
+    "Arun Jaitley Stadium":                                                    "Arun Jaitley Stadium, Delhi",
+    "Brabourne Stadium":                                                        "Brabourne Stadium, Mumbai",
+    "Dr DY Patil Sports Academy":                                               "Dr DY Patil Sports Academy, Mumbai",
+    "Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium":                     "Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium, Visakhapatnam",
+    "Eden Gardens":                                                             "Eden Gardens, Kolkata",
+    "Himachal Pradesh Cricket Association Stadium":                             "Himachal Pradesh Cricket Association Stadium, Dharamsala",
+    "M Chinnaswamy Stadium":                                                    "M Chinnaswamy Stadium, Bengaluru",
+    "M.Chinnaswamy Stadium":                                                    "M Chinnaswamy Stadium, Bengaluru",
+    "MA Chidambaram Stadium, Chepauk":                                          "MA Chidambaram Stadium, Chepauk, Chennai",
+    "MA Chidambaram Stadium":                                                   "MA Chidambaram Stadium, Chepauk, Chennai",
+    "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh":  "Maharaja Yadavindra Singh International Cricket Stadium, Mullanpur",
+    "Maharashtra Cricket Association Stadium":                                   "Maharashtra Cricket Association Stadium, Pune",
+    "Subrata Roy Sahara Stadium":                                               "Maharashtra Cricket Association Stadium, Pune",
+    "Punjab Cricket Association IS Bindra Stadium, Mohali":                     "Punjab Cricket Association IS Bindra Stadium, Mohali, Chandigarh",
+    "Punjab Cricket Association IS Bindra Stadium":                             "Punjab Cricket Association IS Bindra Stadium, Mohali, Chandigarh",
+    "Punjab Cricket Association Stadium, Mohali":                               "Punjab Cricket Association IS Bindra Stadium, Mohali, Chandigarh",
+    "Rajiv Gandhi International Stadium, Uppal":                                "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+    "Rajiv Gandhi International Stadium":                                       "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+    "Sardar Patel Stadium, Motera":                                             "Narendra Modi Stadium, Ahmedabad",
+    "Sawai Mansingh Stadium":                                                   "Sawai Mansingh Stadium, Jaipur",
+    "Shaheed Veer Narayan Singh International Stadium":                         "Shaheed Veer Narayan Singh International Stadium, Raipur",
+    "Sheikh Zayed Stadium":                                                     "Sheikh Zayed Stadium, Abu Dhabi",
+    "Wankhede Stadium":                                                         "Wankhede Stadium, Mumbai"
+  },
+
+  "bbl": {
+    "Aurora Stadium, Launceston":                          "Aurora Stadium",
+    "Bellerive Oval, Hobart":                              "Bellerive Oval",
+    "Brisbane Cricket Ground, Woolloongabba":              "Brisbane Cricket Ground",
+    "Brisbane Cricket Ground, Woolloongabba, Brisbane":    "Brisbane Cricket Ground",
+    "Docklands Stadium, Melbourne":                        "Docklands Stadium",
+    "International Sports Stadium, Coffs Harbour":         "International Sports Stadium",
+    "Manuka Oval, Canberra":                               "Manuka Oval",
+    "Western Australia Cricket Association Ground":        "W.A.C.A. Ground"
+  },
+
+  "t20blast": {
+    "College Ground, Cheltenham":                          "College Ground",
+    "County Ground, New Road, Worcester":                  "County Ground, New Road",
+    "Edgbaston, Birmingham":                               "Edgbaston",
+    "Grace Road, Leicester":                               "Grace Road",
+    "Headingley, Leeds":                                   "Headingley",
+    "Kennington Oval, London":                             "Kennington Oval",
+    "Lord's, London":                                      "Lord's",
+    "Merchant Taylors' School Ground, Northwood":          "Merchant Taylors' School Ground",
+    "Old Trafford, Manchester":                            "Old Trafford",
+    "Radlett Cricket Club, Radlett":                       "Radlett Cricket Club",
+    "Riverside Ground, Chester-le-Street":                 "Riverside Ground",
+    "Sophia Gardens, Cardiff":                             "Sophia Gardens",
+    "St Lawrence Ground, Canterbury":                      "St Lawrence Ground",
+    "The Cooper Associates County Ground, Taunton":        "The Cooper Associates County Ground",
+    "The Kent County Cricket Ground":                      "Kent County Cricket Ground",
+    "The Rose Bowl, Southampton":                          "The Rose Bowl",
+    "Trent Bridge, Nottingham":                            "Trent Bridge"
+  },
+
+  "cpl": {
+    "Brian Lara Stadium, Tarouba, Trinidad":               "Brian Lara Stadium, Tarouba",
+    "Daren Sammy National Cricket Stadium, Gros Islet, St Lucia": "Daren Sammy National Cricket Stadium",
+    "Daren Sammy National Cricket Stadium, Gros Islet":    "Daren Sammy National Cricket Stadium",
+    "Kensington Oval, Bridgetown, Barbados":               "Kensington Oval, Bridgetown",
+    "Providence Stadium, Guyana":                          "Providence Stadium",
+    "Queen's Park Oval, Port of Spain, Trinidad":          "Queen's Park Oval, Port of Spain",
+    "Sir Vivian Richards Stadium, North Sound, Antigua":   "Sir Vivian Richards Stadium, North Sound",
+    "Warner Park, Basseterre, St Kitts":                   "Warner Park, Basseterre"
+  },
+
+  "bpl": {
+    "Zahur Ahmed Chowdhury Stadium, Chittagong":           "Zahur Ahmed Chowdhury Stadium, Chattogram"
+  },
+
+  "psl": {
+    "Gaddafi Stadium, Lahore":                             "Gaddafi Stadium",
+    "National Stadium, Karachi":                           "National Stadium",
+    "Sheikh Zayed Stadium, Abu Dhabi":                     "Sheikh Zayed Stadium"
+  },
+
+  "wbb": {
+    "Allan Border Field, Brisbane":                                "Allan Border Field",
+    "Aurora Stadium, Launceston":                                  "Aurora Stadium",
+    "Bellerive Oval, Hobart":                                      "Bellerive Oval",
+    "Blacktown International Sportspark, Sydney":                  "Blacktown International Sportspark",
+    "Brisbane Cricket Ground, Woolloongabba, Brisbane":            "Brisbane Cricket Ground, Woolloongabba",
+    "Casey Fields No 4, Melbourne":                                "Casey Fields No. 4",
+    "Drummoyne Oval, Sydney":                                      "Drummoyne Oval",
+    "Eastern Oval, Ballarat":                                      "Eastern Oval",
+    "Invermay Park, Launceston":                                   "Invermay Park",
+    "Junction Oval, Melbourne":                                    "Junction Oval",
+    "Karen Rolton Oval, Adelaide":                                 "Karen Rolton Oval",
+    "Lilac Hill Park, Perth":                                      "Lilac Hill Park",
+    "Manuka Oval, Canberra":                                       "Manuka Oval",
+    "North Sydney Oval, Sydney":                                   "North Sydney Oval",
+    "Western Australia Cricket Association Ground, Perth":         "W.A.C.A. Ground"
+  },
+
+  "wpl": {
+    "Arun Jaitley Stadium":                                "Arun Jaitley Stadium, Delhi",
+    "Brabourne Stadium":                                   "Brabourne Stadium, Mumbai",
+    "Dr DY Patil Sports Academy":                          "Dr DY Patil Sports Academy, Mumbai",
+    "Dr DY Patil Sports Academy, Navi Mumbai":             "Dr DY Patil Sports Academy, Mumbai",
+    "M Chinnaswamy Stadium":                               "M Chinnaswamy Stadium, Bengaluru",
+    "M.Chinnaswamy Stadium":                               "M Chinnaswamy Stadium, Bengaluru"
+  },
+
+  "mlc": {
+    "Grand Prairie Stadium, Dallas":                       "Grand Prairie Stadium",
+    "Oakland Coliseum,Oakland":                            "Oakland Coliseum, Oakland"
+  },
+
+  "sat20": {},
+  "the100": {},
+  "the100women": {},
+  "lpl": {},
+  "npl": {},
+  "ilt": {}
+}
