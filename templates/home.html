@@ -42,6 +42,49 @@
     </div>
 </div>
 
+<!-- Compare Two Players -->
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between" role="button"
+         data-bs-toggle="collapse" data-bs-target="#compareBody" aria-expanded="false" aria-controls="compareBody">
+        <h4 class="mb-0"><i class="fas fa-code-compare me-2"></i>Compare Two Players</h4>
+        <i class="fas fa-chevron-down"></i>
+    </div>
+    <div class="collapse" id="compareBody">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4 col-12" style="position:relative;">
+                    <label class="form-label small mb-1">Player A</label>
+                    <input type="text" id="cmp-a-input" class="form-control" placeholder="e.g. 'Kohli'" autocomplete="off">
+                    <div id="cmp-a-suggestions" class="suggestions-dropdown"></div>
+                </div>
+                <div class="col-md-4 col-12" style="position:relative;">
+                    <label class="form-label small mb-1">Player B</label>
+                    <input type="text" id="cmp-b-input" class="form-control" placeholder="e.g. 'Rohit'" autocomplete="off">
+                    <div id="cmp-b-suggestions" class="suggestions-dropdown"></div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label small mb-1">Type</label>
+                    <select id="cmp-type" class="form-select">
+                        <option value="batsman">Batsman</option>
+                        <option value="bowler">Bowler</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label small mb-1 d-none d-md-block">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="button" id="cmp-go" class="btn btn-primary flex-grow-1"><i class="fas fa-bolt me-1"></i>Compare</button>
+                        <button type="button" id="cmp-clear" class="btn btn-outline-secondary" title="Clear comparison"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="cmp-result" class="mt-3"></div>
+            <div id="cmp-chart-wrap" class="mt-3" style="display:none;">
+                <canvas id="cmp-chart" height="140"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% set league_names = {
     't20blast': 'T20 Blast',
     'ipl': 'IPL',
@@ -304,5 +347,198 @@ function closePlayerStats() {
     refreshBtn.style.display = "none";
 }
 refreshBtn.onclick = closePlayerStats;
+
+// ===== Compare Two Players (uses existing /api/player_stats & /api/player_fuzzy) =====
+(function() {
+    const aIn = document.getElementById('cmp-a-input');
+    const bIn = document.getElementById('cmp-b-input');
+    const aBox = document.getElementById('cmp-a-suggestions');
+    const bBox = document.getElementById('cmp-b-suggestions');
+    const typeSel = document.getElementById('cmp-type');
+    const goBtn = document.getElementById('cmp-go');
+    const resultEl = document.getElementById('cmp-result');
+    const chartWrap = document.getElementById('cmp-chart-wrap');
+    let chartInstance = null;
+
+    function leagueVal() {
+        const el = document.getElementById('league-select');
+        return el ? el.value : '';
+    }
+
+    // Lightweight reusable autocomplete (debounced + abortable)
+    function attachAutocomplete(input, box) {
+        let timer = null, controller = null;
+        input.addEventListener('input', function() {
+            const q = input.value.trim();
+            if (timer) clearTimeout(timer);
+            if (!q) { box.style.display = 'none'; return; }
+            timer = setTimeout(function() {
+                if (controller) controller.abort();
+                controller = new AbortController();
+                fetch(`/api/player_fuzzy?q=${encodeURIComponent(q)}&league=${leagueVal()}`, { signal: controller.signal })
+                    .then(r => r.json())
+                    .then(data => {
+                        const list = data.players || [];
+                        if (!list.length) { box.style.display = 'none'; return; }
+                        box.innerHTML = '';
+                        list.forEach(name => {
+                            const div = document.createElement('div');
+                            div.className = 'suggestion-item';
+                            div.textContent = name;
+                            div.onclick = () => { input.value = name; box.style.display = 'none'; };
+                            box.appendChild(div);
+                        });
+                        box.style.display = 'block';
+                    })
+                    .catch(err => { if (err.name !== 'AbortError') console.warn(err); });
+            }, 200);
+        });
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#' + input.id)) box.style.display = 'none';
+        });
+    }
+    attachAutocomplete(aIn, aBox);
+    attachAutocomplete(bIn, bBox);
+
+    function num(v) { return (typeof v === 'number') ? v : (parseFloat(v) || 0); }
+
+    // metric definitions per type: [label, key, higherIsBetter]
+    const METRICS = {
+        batsman: [
+            ['Matches', 'matches', true],
+            ['Runs', 'runs', true],
+            ['Average', 'avg', true],
+            ['Strike Rate', 'sr', true],
+            ['100s', 'hundreds', true],
+            ['50s', 'fifties', true],
+            ['Highest', 'hs', true],
+            ['Dot %', 'dot_pct', false],
+        ],
+        bowler: [
+            ['Matches', 'matches', true],
+            ['Wickets', 'wickets', true],
+            ['Average', 'avg', false],
+            ['Economy', 'eco', false],
+            ['Strike Rate', 'sr', false],
+            ['5W+', 'five_wkts', true],
+            ['Dot %', 'dot_pct', true],
+        ],
+    };
+    // Which metrics to plot on the chart (comparable visual)
+    const CHART_KEYS = {
+        batsman: ['Average', 'Strike Rate', '100s', '50s'],
+        bowler: ['Wickets', 'Average', 'Economy', '5W+'],
+    };
+
+    function fetchPlayer(name, ptype) {
+        return fetch(`/api/player_stats?name=${encodeURIComponent(name)}&ptype=${encodeURIComponent(ptype)}&league=${leagueVal()}`)
+            .then(r => r.json());
+    }
+
+    function render(aName, bName, ptype, a, b) {
+        const metrics = METRICS[ptype];
+        let rows = '';
+        metrics.forEach(([label, key, higherBetter]) => {
+            const av = num(a[key]); const bv = num(b[key]);
+            let aCls = '', bCls = '';
+            if (av !== bv) {
+                const aWins = higherBetter ? av > bv : av < bv;
+                aCls = aWins ? 'cmp-win' : '';
+                bCls = aWins ? '' : 'cmp-win';
+            }
+            const aDisp = (a[key] === null || a[key] === undefined) ? '-' : a[key];
+            const bDisp = (b[key] === null || b[key] === undefined) ? '-' : b[key];
+            rows += `<tr><td class="${aCls} text-center fw-semibold">${aDisp}</td>`
+                  + `<th class="text-center bg-light">${label}</th>`
+                  + `<td class="${bCls} text-center fw-semibold">${bDisp}</td></tr>`;
+        });
+        const badge = ptype === 'batsman' ? 'bg-primary' : 'bg-success';
+        resultEl.innerHTML = `
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle mb-0 cmp-table">
+                <thead><tr>
+                  <th class="text-center"><span class="badge ${badge}">${aName}</span></th>
+                  <th class="text-center text-muted">Metric</th>
+                  <th class="text-center"><span class="badge ${badge}">${bName}</span></th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><span class="cmp-win px-2">Highlighted</span> = better value.</p>`;
+
+        // Chart
+        if (typeof Chart === 'undefined') return;
+        const keys = CHART_KEYS[ptype];
+        const labels = keys;
+        const aData = keys.map(lbl => {
+            const m = metrics.find(x => x[0] === lbl); return m ? num(a[m[1]]) : 0;
+        });
+        const bData = keys.map(lbl => {
+            const m = metrics.find(x => x[0] === lbl); return m ? num(b[m[1]]) : 0;
+        });
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const grid = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+        const tick = isDark ? '#cbd5e1' : '#495057';
+        chartWrap.style.display = 'block';
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(document.getElementById('cmp-chart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: aName, data: aData, backgroundColor: 'rgba(13,110,253,0.75)', borderRadius: 4 },
+                    { label: bName, data: bData, backgroundColor: 'rgba(255,193,7,0.85)', borderRadius: 4 },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: tick } } },
+                scales: {
+                    x: { grid: { color: grid }, ticks: { color: tick } },
+                    y: { grid: { color: grid }, ticks: { color: tick }, beginAtZero: true },
+                },
+            },
+        });
+    }
+
+    goBtn.addEventListener('click', function() {
+        const aName = aIn.value.trim();
+        const bName = bIn.value.trim();
+        const ptype = typeSel.value;
+        if (!aName || !bName) {
+            resultEl.innerHTML = `<div class="alert alert-warning mb-0">Enter both player names to compare.</div>`;
+            chartWrap.style.display = 'none';
+            return;
+        }
+        resultEl.innerHTML = `<div class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Comparing…</div>`;
+        chartWrap.style.display = 'none';
+        Promise.all([fetchPlayer(aName, ptype), fetchPlayer(bName, ptype)])
+            .then(([a, b]) => {
+                if (a.error || b.error) {
+                    resultEl.innerHTML = `<div class="alert alert-danger mb-0">${a.error || ''} ${b.error || ''}</div>`;
+                    return;
+                }
+                render(a.resolved_name || aName, b.resolved_name || bName, ptype, a, b);
+            })
+            .catch(() => {
+                resultEl.innerHTML = `<div class="alert alert-danger mb-0">Could not load comparison. Try again.</div>`;
+            });
+    });
+
+    const clearBtn = document.getElementById('cmp-clear');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            aIn.value = '';
+            bIn.value = '';
+            typeSel.value = 'batsman';
+            aBox.style.display = 'none';
+            bBox.style.display = 'none';
+            resultEl.innerHTML = '';
+            chartWrap.style.display = 'none';
+            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+            aIn.focus();
+        });
+    }
+})();
 </script>
 {% endblock %}

@@ -814,4 +814,23 @@ html[data-theme="dark"] .player-database-card .player-stats-table th {
   .mobile-bottom-nav .mbn-item .mbn-icon { transition: none; }
 }
 
+/* ---- Player comparison highlight ---- */
+.cmp-win {
+  background-color: rgba(25, 135, 84, 0.18);
+  color: #0f5132;
+  border-radius: 4px;
+}
+html[data-theme="dark"] .cmp-win {
+  background-color: rgba(25, 135, 84, 0.30);
+  color: #6ee7b7;
+}
+html[data-theme="dark"] .cmp-table th.bg-light {
+  background-color: var(--mm-elevated) !important;
+  color: var(--mm-text) !important;
+}
+/* Collapsible compare header chevron rotates when open */
+.card-header[aria-expanded="true"] .fa-chevron-down { transform: rotate(180deg); }
+.card-header .fa-chevron-down { transition: transform 0.2s ease; }
+
+
 

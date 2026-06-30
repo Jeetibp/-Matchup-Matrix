@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from cricket_analytics_core import CricketAnalytics
 import os
 import warnings
@@ -1118,6 +1118,21 @@ def user_guide():
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'healthy', 'service': 'matchup-matrix'}), 200
+
+# --- PWA support (static file serving only — no analytics logic) ---
+@app.route('/sw.js')
+def service_worker():
+    """Serve the service worker from root so it can control the whole app."""
+    resp = send_from_directory('static/js', 'sw.js', mimetype='application/javascript')
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+@app.route('/manifest.webmanifest')
+def web_manifest():
+    """Serve the PWA manifest."""
+    return send_from_directory('static', 'manifest.webmanifest',
+                               mimetype='application/manifest+json')
 
 # Simple test route for debugging
 @app.route('/test')

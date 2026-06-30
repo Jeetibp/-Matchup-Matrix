@@ -7,6 +7,19 @@
     </div>
     <div class="card-body">
 
+      <div class="alert alert-success border-0 shadow-sm">
+        <h5 class="mb-2"><i class="fas fa-sparkles me-1"></i> What's New</h5>
+        <div class="row g-2">
+          <div class="col-md-6"><i class="fas fa-moon text-primary me-1"></i> <b>Dark / Light theme</b> toggle (remembers your choice)</div>
+          <div class="col-md-6"><i class="fas fa-download text-primary me-1"></i> <b>Install as an app</b> on your phone or desktop (PWA)</div>
+          <div class="col-md-6"><i class="fas fa-code-compare text-primary me-1"></i> <b>Compare two players</b> side-by-side with a chart</div>
+          <div class="col-md-6"><i class="fas fa-wifi text-primary me-1"></i> <b>Works offline</b> — pages you've visited load without a connection</div>
+          <div class="col-md-6"><i class="fas fa-table-list text-primary me-1"></i> <b>Smart tables</b> — sort, quick-filter and export to CSV</div>
+          <div class="col-md-6"><i class="fas fa-mobile-screen text-primary me-1"></i> <b>Mobile bottom bar</b> for one-tap navigation</div>
+        </div>
+        <a href="#whats-new-details" class="small">See how to use these →</a>
+      </div>
+
       <h4>1. Getting Started</h4>
       <ul>
         <li><b>Pick a league</b> from the dropdown in the top navbar. Supported competitions include IPL, BBL, BPL, CPL, ILT20, LPL, MLC, NPL, PSL, SA20, T20 Blast, The Hundred (M/W), WBBL and WPL — whichever data files are available.</li>
@@ -130,6 +143,50 @@
         <li><b>Venue Filter</b>: On Home and Head-to-Head; canonical venue names map across spelling variants.</li>
         <li><b>Clear All</b>: Yellow Clear button on filter dropdowns resets selections.</li>
         <li><b>League Selector</b>: Top-right navbar — switch leagues without losing the current page.</li>
+      </ul>
+      <hr>
+
+      <h4 id="whats-new-details">7a. App Experience — Themes, Install, Compare & Smart Tables</h4>
+
+      <p class="mb-2"><b><i class="fas fa-moon me-1"></i>Dark / Light Theme</b></p>
+      <ul>
+        <li>Tap the <b>🌙 / ☀️ button</b> in the top-right navbar to switch between light and dark.</li>
+        <li>Your choice is saved and applied automatically on every visit — no flicker on load.</li>
+        <li>First-time visitors automatically get the theme that matches their device setting.</li>
+      </ul>
+
+      <p class="mb-2"><b><i class="fas fa-download me-1"></i>Install as an App (PWA)</b></p>
+      <ul>
+        <li><b>Android / Chrome / Edge</b>: tap the <b>Install</b> button that appears in the navbar, or use the browser menu → "Install app" / "Add to Home screen".</li>
+        <li><b>iPhone / Safari</b>: tap the Share icon → <b>Add to Home Screen</b>.</li>
+        <li>Once installed it opens full-screen with its own icon, just like a native app.</li>
+        <li><b>Offline</b>: pages and stats you've already opened keep working without internet. Live data (new searches) still needs a connection.</li>
+      </ul>
+
+      <p class="mb-2"><b><i class="fas fa-code-compare me-1"></i>Compare Two Players</b></p>
+      <ul>
+        <li>On the <b>Home</b> page, open the <b>"Compare Two Players"</b> panel.</li>
+        <li>Type two player names (autocomplete helps), choose Batsman or Bowler, and tap <b>Compare</b>.</li>
+        <li>You get a side-by-side table with the <b>better value highlighted</b> (it correctly treats lower-is-better stats like bowling Average, Economy and Strike Rate), plus a <b>bar chart</b> of the key metrics.</li>
+        <li>Comparison uses the league currently selected in the navbar.</li>
+      </ul>
+
+      <p class="mb-2"><b><i class="fas fa-table-list me-1"></i>Smart Tables</b></p>
+      <ul>
+        <li><b>Sort</b>: tap any column header on the big leaderboards to sort ascending/descending.</li>
+        <li><b>Quick filter</b>: type in the box above large tables to instantly narrow rows.</li>
+        <li><b>Export CSV</b>: download the visible rows for use in Excel/Sheets.</li>
+        <li><b>Tooltips</b>: hover (or tap) the abbreviated column headers to see what each stat means.</li>
+        <li><b>Colour badges</b>: strong batting/bowling values are tinted green, weak ones red, for quick scanning.</li>
+        <li><b>Filter chips</b>: your active filters appear as removable tags — tap the ✕ to drop one.</li>
+        <li><b>Sticky headers</b>: on phones, column names stay pinned while you scroll long tables.</li>
+      </ul>
+
+      <p class="mb-2"><b><i class="fas fa-mobile-screen me-1"></i>Mobile Navigation & Speed</b></p>
+      <ul>
+        <li>A <b>bottom navigation bar</b> gives one-tap access to Home, Batting, Bowling, Head-to-Head and Venue. The current page is highlighted.</li>
+        <li>After you submit any filter or search, the page <b>auto-scrolls to the results</b> so you never miss them.</li>
+        <li>Search is <b>debounced</b> (waits until you pause typing) and scrolling is optimised to stay smooth on phones.</li>
       </ul>
       <hr>
 

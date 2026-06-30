@@ -14,6 +14,9 @@ git add data/ templates/
 # Stage static but exclude PNG (HF uses Xet for images, not LFS)
 git add static/css/style.css
 git add static/js/
+# PWA: manifest + small app icons (not the large background.png)
+git add static/manifest.webmanifest
+git add static/img/icons/
 
 # Commit and push
 git commit -m "deploy: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
