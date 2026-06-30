@@ -17,6 +17,8 @@ git add static/js/
 # PWA: manifest + small app icons (not the large background.png)
 git add static/manifest.webmanifest
 git add static/img/icons/
+# Lightweight compressed background (WebP ~110KB) — replaces the 2.3MB PNG
+git add static/img/background.webp
 
 # Commit and push
 git commit -m "deploy: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
