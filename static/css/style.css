@@ -108,7 +108,7 @@ table.table, table.table tbody tr, table.table thead th {
   .table-sticky-col thead th:first-child {
     background-color: #212529;
     color: #fff;
-    z-index: 3;
+    z-index: 5;
   }
   /* Form rows wrap nicely */
   form.row > [class*="col-"] {
@@ -693,3 +693,125 @@ html[data-theme="dark"] .mobile-bottom-nav .mbn-item:active { color: #60a5fa; }
 
 /* When jumping to an anchor (e.g. #matchup-output), offset by sticky navbar height */
 html { scroll-padding-top: 70px; scroll-behavior: smooth; }
+
+/* =========================================================
+   Professional mobile polish + active navigation
+   (presentation only — additive)
+   ========================================================= */
+
+/* ---- Active state: top navbar ---- */
+.navbar-nav .nav-link.active {
+  color: #ffdd57 !important;
+  position: relative;
+}
+@media (min-width: 992px) {
+  .navbar-nav .nav-link.active::after {
+    content: "";
+    position: absolute;
+    left: 0.9rem; right: 0.9rem; bottom: 2px;
+    height: 2px;
+    background: #ffdd57;
+    border-radius: 2px;
+  }
+}
+
+/* ---- Active state: mobile bottom nav (pill highlight) ---- */
+.mobile-bottom-nav .mbn-item.active {
+  color: #0d6efd;
+  font-weight: 600;
+}
+.mobile-bottom-nav .mbn-item.active .mbn-icon {
+  transform: translateY(-1px) scale(1.08);
+}
+.mobile-bottom-nav .mbn-item .mbn-icon {
+  transition: transform 0.15s ease;
+}
+.mobile-bottom-nav .mbn-item.active::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  width: 28px; height: 3px;
+  border-radius: 3px;
+  background: #0d6efd;
+}
+.mobile-bottom-nav .mbn-item { position: relative; }
+html[data-theme="dark"] .mobile-bottom-nav .mbn-item.active { color: #60a5fa; }
+html[data-theme="dark"] .mobile-bottom-nav .mbn-item.active::before { background: #60a5fa; }
+
+/* ---- Professional touch & spacing refinements (phones) ---- */
+@media (max-width: 576px) {
+  /* Comfortable tap targets per Apple/Google guidelines (>=44px) */
+  .btn, .form-control, .form-select { min-height: 44px; }
+  .navbar-nav .nav-link { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+
+  /* Card breathing room + softer elevation */
+  .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06); }
+  .card + .card { margin-top: 0.75rem; }
+
+  /* Page headings: tighter, clearer hierarchy */
+  h1 { font-size: 1.25rem; font-weight: 700; }
+  h2 { font-size: 1.15rem; font-weight: 700; }
+
+  /* Quick-link action grid on home: equal, tappable tiles */
+  .row.g-2 > [class*="col-"] .btn { padding: 0.6rem 0.4rem; font-weight: 600; }
+
+  /* Stat “hero” numbers stay readable when stacked */
+  .h4, h4 { font-size: 1.05rem; }
+  .display-6 { font-size: 1.6rem; }
+
+  /* Sticky table header on mobile so columns stay labelled while scrolling
+     (scoped to single-header leaderboard tables to avoid multi-row clashes) */
+  .table-sticky-col { max-height: none; }
+  .table-responsive:has(.table-sticky-col) { max-height: 72vh; }
+  .table-sticky-col thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+  }
+
+  /* Prevent accidental text-zoom on input focus (iOS zooms when <16px) */
+  input.form-control, select.form-select, textarea.form-control { font-size: 16px; }
+}
+
+/* ---- Tablet: keep bottom nav, slightly roomier ---- */
+@media (min-width: 577px) and (max-width: 991.98px) {
+  .mobile-bottom-nav .mbn-item { font-size: 0.72rem; }
+  .mobile-bottom-nav .mbn-icon { font-size: 1.3rem; }
+}
+
+/* ---- Dark-mode fixes: Home search dropdown + player card ---- */
+html[data-theme="dark"] .suggestions-dropdown {
+  background: var(--mm-elevated) !important;
+  border-color: var(--mm-border) !important;
+  color: var(--mm-text);
+}
+html[data-theme="dark"] .suggestion-item {
+  border-bottom-color: var(--mm-border) !important;
+  color: var(--mm-text);
+}
+html[data-theme="dark"] .suggestion-item:hover,
+html[data-theme="dark"] .suggestion-item.highlighted {
+  background-color: rgba(96, 165, 250, 0.18) !important;
+}
+html[data-theme="dark"] .player-database-card {
+  background: var(--mm-elevated) !important;
+  color: var(--mm-text);
+}
+html[data-theme="dark"] .player-database-card .player-stats-table th {
+  color: var(--mm-text);
+}
+
+/* ---- Performance: avoid mobile scroll jank ----
+   background-attachment:fixed forces a full-screen repaint on every scroll
+   frame on most mobile GPUs. Use normal scroll on touch/small screens. */
+@media (max-width: 991.98px) {
+  body { background-attachment: scroll; }
+  /* Lighter blur on bottom nav for low-end devices */
+  .mobile-bottom-nav { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .mobile-bottom-nav .mbn-item .mbn-icon { transition: none; }
+}
+
+

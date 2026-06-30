@@ -288,8 +288,36 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
   }
 
+  // ---------- Active nav highlighting ----------
+  function highlightActiveNav() {
+    const path = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+    const matchHref = (href) => {
+      if (!href) return false;
+      let p;
+      try { p = new URL(href, window.location.origin).pathname; }
+      catch (e) { return false; }
+      p = p.replace(/\/+$/, '') || '/';
+      return p === path;
+    };
+    // Top navbar
+    document.querySelectorAll('.navbar-nav .nav-link').forEach((a) => {
+      if (matchHref(a.getAttribute('href'))) {
+        a.classList.add('active');
+        a.setAttribute('aria-current', 'page');
+      }
+    });
+    // Mobile bottom nav
+    document.querySelectorAll('.mobile-bottom-nav .mbn-item').forEach((a) => {
+      if (matchHref(a.getAttribute('href'))) {
+        a.classList.add('active');
+        a.setAttribute('aria-current', 'page');
+      }
+    });
+  }
+
   // ---------- Init ----------
   function init() {
+    try { highlightActiveNav(); } catch (e) { console.warn('activenav:', e); }
     try { renderFilterChips(); } catch (e) { console.warn('chips:', e); }
     try { applyTooltips(); } catch (e) { console.warn('tooltips:', e); }
     try { formatNumbers(); } catch (e) { console.warn('numfmt:', e); }
