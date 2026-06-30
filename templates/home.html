@@ -20,7 +20,7 @@
             </div>
             <div class="col-md-2 col-6 mb-2 mb-md-0">
                 <div class="dropdown w-100">
-                    <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">All Seasons</button>
+                    <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-display="static" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">All Seasons</button>
                     <ul class="dropdown-menu p-2" id="season-dd-menu" style="max-height:300px;overflow-y:auto;min-width:100%">
                         <li class="mb-1"><button type="button" class="btn btn-sm btn-outline-secondary w-100" id="season-clear-btn">Clear All</button></li>
                     </ul>
@@ -139,7 +139,8 @@ function syncSeasonBtn() {
     const btn = document.getElementById('season-dd-btn');
     if (btn) {
         btn.textContent = selected.length === 0 ? 'All Seasons'
-            : (selected.length === 1 ? selected[0] : `${selected.length} seasons`);
+            : selected.join(', ');
+        btn.title = selected.join(', ');
     }
     return selected;
 }
@@ -274,10 +275,15 @@ document.getElementById('player-search-form').addEventListener('submit', functio
             </div>
             </div>`;
         }
-        document.getElementById('player-result-card').innerHTML = html;
+        const resultCard = document.getElementById('player-result-card');
+        resultCard.innerHTML = html;
         refreshBtn.style.display = "inline-block";
         activeIdx = -1;
-        playerInput.focus();
+        if (resultCard.firstChild) {
+          resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          playerInput.focus();
+        }
       });
 });
 

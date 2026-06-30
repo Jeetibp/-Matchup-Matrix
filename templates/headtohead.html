@@ -127,7 +127,7 @@
         </div>
     </div>
     <div class="card-body">
-        <form method="POST" id="multiple-form">
+        <form method="POST" id="multiple-form" onsubmit="location.hash='#matchup-output';">
             <input type="hidden" name="analysis_type" value="multiple">
             <input type="hidden" name="innings_filter" value="{{ innings_filter }}">
             <input type="hidden" name="league" value="{{ league }}">
@@ -177,17 +177,6 @@
             </div>
             <button type="submit" class="btn btn-warning btn-lg">📊 Analyze Multiple Matchups</button>
         </form>
-        <div class="row mt-3">
-            <div class="col-md-12">
-                <label>Toggle columns to sort by:</label>
-                <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Sort toggles">
-                    <button class="btn btn-outline-dark sort-toggle" data-sort="runs">Runs</button>
-                    <button class="btn btn-outline-dark sort-toggle" data-sort="balls">Balls</button>
-                    <button class="btn btn-outline-dark sort-toggle" data-sort="strike_rate">SR</button>
-                    <button class="btn btn-outline-dark sort-toggle" data-sort="wickets">Wickets</button>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -534,14 +523,6 @@ document.getElementById('swap-multi-btn').addEventListener('click', function() {
                        <button type="button" class="btn btn-success add-batsman">+</button>`;
     document.getElementById('batsmen_container').appendChild(divBa);
     setupMultiAutocomplete(divBa.querySelector('.multi-input'));
-});
-
-// Sorting toggles (placeholder for future expansion)
-document.querySelectorAll('.sort-toggle').forEach(button => {
-    button.addEventListener('click', function() {
-        const sortKey = this.dataset.sort;
-        // sortResultsTable(sortKey); // Implement if needed
-    });
 });
 
 // On page load, initialize

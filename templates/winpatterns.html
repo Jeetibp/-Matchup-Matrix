@@ -6,7 +6,7 @@
 
 {% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
 
-<form class="row gy-2 gx-3 align-items-end mb-4" method="get">
+<form class="row gy-2 gx-3 align-items-end mb-4" method="get" onsubmit="location.hash='#results-output';">
   <div class="col-md-4 col-12">
     <label class="form-label small mb-1">Team</label>
     <select name="team" class="form-select" required>
@@ -24,8 +24,8 @@
   <div class="col-md-2 col-12">
     <label class="form-label small mb-1">Seasons</label>
     <div class="dropdown w-100">
-      <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        {% if not selected_seasons %}All Seasons{% elif selected_seasons|length == 1 %}{{ selected_seasons[0] }}{% else %}{{ selected_seasons|length }} seasons{% endif %}
+      <button class="form-select text-start" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-display="static" id="season-dd-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        {% if not selected_seasons %}All Seasons{% else %}{{ selected_seasons|join(', ') }}{% endif %}
       </button>
       <ul class="dropdown-menu p-2" style="max-height:300px;overflow-y:auto;min-width:100%">
         <li class="mb-1"><button type="button" class="btn btn-sm btn-outline-secondary w-100" id="season-clear-btn">Clear All</button></li>
@@ -46,6 +46,7 @@
 </form>
 
 {% if result %}
+<a id="results-output"></a>
 <div class="card mb-3">
   <div class="card-header bg-primary text-white"><strong>{{ result.team }} — Overall</strong>{% if result.venue %} <small>@ {{ result.venue }}</small>{% endif %}</div>
   <div class="card-body">
@@ -144,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const cbs = document.querySelectorAll('.season-cb');
         const selected = Array.from(cbs).filter(c => c.checked).map(c => c.value);
         const btn = document.getElementById('season-dd-btn');
-        if (btn) btn.textContent = selected.length === 0 ? 'All Seasons' : (selected.length === 1 ? selected[0] : `${selected.length} seasons`);
+        if (btn) { btn.textContent = selected.length === 0 ? 'All Seasons' : selected.join(', '); btn.title = selected.join(', '); }
         const c = document.getElementById('season-hidden-container');
         if (c) c.innerHTML = selected.map(s => `<input type="hidden" name="season" value="${s}">`).join('');
     }
