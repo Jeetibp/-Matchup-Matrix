@@ -1,0 +1,517 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('matches_page', date=fixture.date) }}" class="btn btn-sm btn-outline-secondary mb-3">
+        <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Matches
+    </a>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <span class="badge bg-primary">{{ fixture.league|upper }}</span>
+        <span id="live-badge" class="badge bg-danger" {% if 'live' not in fixture.status|lower %}style="display:none"{% endif %}>LIVE</span>
+        <span class="small text-muted">{{ fixture.date }}</span>
+    </div>
+    <h1 class="h3 mb-1">{{ fixture.team_a }} vs {{ fixture.team_b }}</h1>
+    <p class="text-muted mb-0"><i class="fas fa-location-dot me-1" aria-hidden="true"></i>{{ fixture.venue }}</p>
+</div>
+
+<section class="card mb-3" aria-labelledby="live-score-heading">
+    <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+        <h2 id="live-score-heading" class="h5 mb-0">Match Centre</h2>
+        <span id="live-updated" class="small text-white-50">Cached feed</span>
+    </div>
+    <div class="card-body">
+        <p id="live-status" class="fw-semibold mb-3">{{ fixture.status }}</p>
+        <div id="live-scores" class="row g-2 mb-3">
+            {% for innings in fixture.score %}
+            <div class="col-12 col-sm-6"><div class="border rounded p-3">{{ innings.inning or 'Innings' }}: <strong>{{ innings.r }}/{{ innings.w }}</strong> ({{ innings.o }})</div></div>
+            {% endfor %}
+        </div>
+        <div id="toss-info" class="small text-muted">
+            {% if fixture.toss_winner %}{{ fixture.toss_winner }} won the toss{% if fixture.toss_choice %} and chose to {{ fixture.toss_choice }}{% endif %}.{% else %}Toss information is not available yet.{% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="mb-3" aria-labelledby="lineup-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="lineup-heading" class="h4 mb-0">Playing XI</h2>
+        <span id="lineup-state" class="badge {% if fixture.lineups %}bg-success{% else %}bg-secondary{% endif %}">
+            {{ 'Confirmed' if fixture.lineups else 'Awaiting toss' }}
+        </span>
+    </div>
+    <div id="lineup-list" class="row g-3">
+        {% for lineup in fixture.lineups %}
+        <div class="col-12 col-md-6">
+            <div class="border rounded p-3 h-100">
+                <h3 class="h6">{{ lineup.team }}</h3>
+                <ol class="row row-cols-1 row-cols-sm-2 small mb-0 ps-4">
+                    {% for player in lineup.players %}<li class="col mb-1">{{ player }}</li>{% endfor %}
+                </ol>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12"><div class="alert alert-light border mb-0">Confirmed playing XIs will appear here when the source publishes them. Matchup Matrix will not guess a confirmed lineup.</div></div>
+        {% endfor %}
+    </div>
+</section>
+
+{% if probable_xi and (probable_xi.xi_team_a or probable_xi.xi_team_b) %}
+<section class="mb-4" aria-labelledby="probable-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="probable-heading" class="h4 mb-0">Probable XI</h2>
+        <span class="badge bg-warning text-dark small">AI predicted · not official</span>
+    </div>
+    <div class="table-responsive border rounded">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width:3rem">#</th>
+                    <th class="text-center">{{ fixture.team_a }}</th>
+                    <th class="text-center">{{ fixture.team_b }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in range(11) %}
+                <tr>
+                    <td class="text-center text-muted">{{ i + 1 }}</td>
+                    <td class="text-center">{{ probable_xi.xi_team_a[i] if i < probable_xi.xi_team_a|length else "—" }}</td>
+                    <td class="text-center">{{ probable_xi.xi_team_b[i] if i < probable_xi.xi_team_b|length else "—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="small text-muted mt-2">
+        {{ probable_xi.rationale }}
+    </div>
+    <small class="text-muted">
+        AI prediction based on current squads from web search, recent form, and venue analytics.
+        Will switch to official XI when CricketData publishes it.
+    </small>
+</section>
+{% elif probable_xi %}
+<section class="mb-4" aria-labelledby="probable-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="probable-heading" class="h4 mb-0">Probable XI</h2>
+        <span class="badge bg-warning text-dark small">AI predicted · not official</span>
+    </div>
+    <div class="alert alert-warning mb-0">
+        {{ probable_xi.rationale or "Squad data not yet available — prediction will appear when we can verify current squads." }}
+    </div>
+</section>
+{% endif %}
+
+{% if report_pending and not probable_xi %}
+<section class="mb-4" aria-labelledby="probable-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="probable-heading" class="h4 mb-0">Probable XI</h2>
+        <span class="badge bg-warning text-dark small">AI predicted · not official</span>
+    </div>
+    <div class="alert alert-secondary mb-0" id="report-pending-probable">
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        AI is analyzing squads for the probable XI — this page updates automatically. Please wait…
+    </div>
+</section>
+{% endif %}
+
+{% if report_pending and not match_analysis %}
+<section class="mb-4" aria-labelledby="match-analysis-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="match-analysis-heading" class="h4 mb-0">AI Match Prediction Report</h2>
+        <span class="badge bg-info text-dark">AI analysis</span>
+    </div>
+    <div class="alert alert-secondary mb-0" id="report-pending-analysis">
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        Generating the AI match prediction report — this page updates automatically. Please wait…
+    </div>
+</section>
+{% endif %}
+
+{% if match_analysis %}
+<section class="mb-4" aria-labelledby="match-analysis-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="match-analysis-heading" class="h4 mb-0">AI Match Prediction Report</h2>
+        <span class="badge bg-info text-dark">AI analysis</span>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <p class="mb-2">{{ match_analysis.summary }}</p>
+            <div class="row g-2">
+                <div class="col-6 col-lg-2"><div class="intel-stat"><span>{{ fixture.team_a }} expected</span><strong>{{ match_analysis.predicted_team_a_score }}</strong></div></div>
+                <div class="col-6 col-lg-2"><div class="intel-stat"><span>{{ fixture.team_b }} expected</span><strong>{{ match_analysis.predicted_team_b_score }}</strong></div></div>
+                <div class="col-12 col-lg-4"><div class="intel-stat"><span>Chase / defend</span><strong class="small">{{ match_analysis.chase_or_defend }}</strong></div></div>
+            </div>
+        </div>
+    </div>
+    {% if match_analysis.key_batters or match_analysis.key_bowlers %}
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="h6">Key batters</h3>
+                    <ul class="mb-0">
+                        {% for item in match_analysis.key_batters %}
+                        <li class="small">{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="h6">Key bowlers</h3>
+                    <ul class="mb-0">
+                        {% for item in match_analysis.key_bowlers %}
+                        <li class="small">{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% if match_analysis.player_assessments %}
+    <div class="table-responsive border rounded mb-3">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Player</th><th>Team</th><th>Role</th>
+                    <th class="text-center">Pred. runs</th><th class="text-center">Pred. wkts</th>
+                    <th class="text-center">Conf.</th><th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pa in match_analysis.player_assessments %}
+                <tr>
+                    <td>{{ pa.name }}</td>
+                    <td class="small">{{ pa.team }}</td>
+                    <td class="small">{{ pa.role }}</td>
+                    <td class="text-center">{{ pa.predicted_runs }}</td>
+                    <td class="text-center">{{ pa.predicted_wickets }}</td>
+                    <td class="text-center">{{ pa.confidence }}</td>
+                    <td class="small">{{ pa.notes }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% if match_analysis.risks %}
+    <div class="alert alert-warning mb-0 small">
+        <strong>Risks / watch-outs:</strong>
+        <ul class="mb-0">
+            {% for risk in match_analysis.risks %}
+            <li>{{ risk }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="mb-3" aria-labelledby="analysis-heading">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="analysis-heading" class="h4 mb-0">Data Intelligence</h2>
+        <span class="badge bg-secondary">Historical data</span>
+    </div>
+    {% if intelligence and not intelligence.coverage.teams_ready %}
+    <div class="alert alert-warning">
+        Historical team analysis is unavailable because one or both provider team names do not have a verified match in this league's CSV. Venue analysis is shown when available.
+    </div>
+    {% endif %}
+    {% if intelligence and intelligence.facts %}
+    <div class="row g-3">
+        {% for fact in intelligence.facts %}
+        <div class="col-12 col-md-6">
+            <article class="card h-100">
+                <div class="card-body">
+                    <h3 class="h6">{{ fact.label }}</h3>
+                    <p class="mb-2">{{ fact.text }}</p>
+                    <p class="small text-muted mb-0">Sample: {{ fact.sample_size }} · Source: {{ fact.source }}</p>
+                </div>
+            </article>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif intelligence %}
+    <div class="alert alert-warning mb-0">The provider's team or venue names could not yet be matched safely to this league's historical data.</div>
+    {% else %}
+    <div class="alert alert-info mb-0">Historical analysis is loading. Refresh shortly.</div>
+    {% endif %}
+</section>
+
+{% if intelligence and intelligence.coverage.teams_ready %}
+{% set h2h = intelligence.head_to_head %}
+{% set overall = h2h.overall if h2h else none %}
+{% set phase_a = intelligence.team_a_phases.team_summary if intelligence.team_a_phases and intelligence.team_a_phases.team_summary else none %}
+{% set phase_b = intelligence.team_b_phases.team_summary if intelligence.team_b_phases and intelligence.team_b_phases.team_summary else none %}
+{% set venue = intelligence.venue %}
+
+<section class="mb-4" aria-labelledby="scope-heading">
+    <div class="alert alert-info mb-0">
+        <h2 id="scope-heading" class="h6 mb-2"><i class="fas fa-code-branch me-1" aria-hidden="true"></i>Historical franchise scope</h2>
+        {% for current_name, historical_names in intelligence.coverage.lineages.items() %}
+        <div class="small mb-1"><strong>{{ current_name }}:</strong> {{ historical_names|join(' · ') }}</div>
+        {% endfor %}
+        <div class="small text-muted mt-2">Only human-verified franchise histories are combined. The source CSV remains unchanged.</div>
+    </div>
+</section>
+
+{% if overall %}
+<section class="mb-4" aria-labelledby="h2h-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="h2h-heading" class="h4 mb-0">Franchise Head-to-Head</h2>
+        <span class="badge bg-primary">{{ overall.completed }} completed matches</span>
+    </div>
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-lg-2"><div class="intel-stat"><span>Matches</span><strong>{{ overall.matches }}</strong></div></div>
+        <div class="col-6 col-lg-2"><div class="intel-stat intel-stat-win"><span>{{ h2h.team_a }} wins</span><strong>{{ overall.a_wins }}</strong><small>{{ overall.a_win_pct }}%</small></div></div>
+        <div class="col-6 col-lg-2"><div class="intel-stat intel-stat-loss"><span>{{ h2h.team_b }} wins</span><strong>{{ overall.b_wins }}</strong><small>{{ overall.b_win_pct }}%</small></div></div>
+        <div class="col-6 col-lg-2"><div class="intel-stat"><span>No result</span><strong>{{ overall.no_result }}</strong></div></div>
+        <div class="col-6 col-lg-2"><div class="intel-stat"><span>{{ h2h.team_a }} avg</span><strong>{{ overall.a_avg_score }}</strong></div></div>
+        <div class="col-6 col-lg-2"><div class="intel-stat"><span>{{ h2h.team_b }} avg</span><strong>{{ overall.b_avg_score }}</strong></div></div>
+    </div>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('teamvsteam', league=fixture.league, team_a=h2h.team_a, team_b=h2h.team_b) }}">
+        <i class="fas fa-table-list me-1" aria-hidden="true"></i>Open full Team vs Team analysis
+    </a>
+</section>
+{% endif %}
+
+{% if h2h and h2h.recent_matches %}
+<section class="mb-4" aria-labelledby="recent-heading">
+    <h2 id="recent-heading" class="h4 mb-2">Recent Meetings</h2>
+    <div class="table-responsive border rounded">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead><tr><th>Date</th><th>Match</th><th>Venue</th><th>Winner</th></tr></thead>
+            <tbody>
+                {% for match in h2h.recent_matches %}
+                <tr>
+                    <td class="text-nowrap">{{ match.date[:10] }}</td>
+                    <td>{{ match.team1 }} {{ match.team1_score }} – {{ match.team2 }} {{ match.team2_score }}</td>
+                    <td>{{ match.venue }}</td>
+                    <td><strong>{{ match.winner }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{% if phase_a and phase_b %}
+<section class="mb-4" aria-labelledby="phase-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="phase-heading" class="h4 mb-0">Phase Comparison</h2>
+        <span class="small text-muted">Averages in winning innings</span>
+    </div>
+    <div class="table-responsive border rounded">
+        <table class="table align-middle mb-0">
+            <thead>
+                <tr><th>Franchise</th><th>Innings</th><th>Avg score</th><th>Overs 1–6</th><th>7–10</th><th>11–15</th><th>16–20</th></tr>
+            </thead>
+            <tbody>
+                {% for phase in [phase_a, phase_b] %}
+                <tr>
+                    <th>{{ phase.team }}</th>
+                    <td>{{ phase.innings }}</td>
+                    <td>{{ phase.avg_score }}</td>
+                    <td>{{ phase.avg_when_winning.PP1.avg_runs }}/{{ phase.avg_when_winning.PP1.avg_wkts }}w</td>
+                    <td>{{ phase.avg_when_winning.PP2.avg_runs }}/{{ phase.avg_when_winning.PP2.avg_wkts }}w</td>
+                    <td>{{ phase.avg_when_winning.PP3.avg_runs }}/{{ phase.avg_when_winning.PP3.avg_wkts }}w</td>
+                    <td>{{ phase.avg_when_winning.PP4.avg_runs }}/{{ phase.avg_when_winning.PP4.avg_wkts }}w</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted mt-2 mb-0">Each phase cell shows average runs / average wickets lost. Historical association does not guarantee the next match outcome.</p>
+</section>
+{% endif %}
+
+{% if venue %}
+<section class="mb-4" aria-labelledby="venue-heading">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h2 id="venue-heading" class="h4 mb-0">Venue Profile</h2>
+        <span class="badge bg-secondary">{{ venue.total_matches }} matches</span>
+    </div>
+    <div class="row g-2">
+        <div class="col-6 col-md-3"><div class="intel-stat"><span>1st innings avg</span><strong>{{ venue.avg_1st_innings }}</strong></div></div>
+        <div class="col-6 col-md-3"><div class="intel-stat"><span>2nd innings avg</span><strong>{{ venue.avg_2nd_innings }}</strong></div></div>
+        <div class="col-6 col-md-3"><div class="intel-stat intel-stat-win"><span>Chasing wins</span><strong>{{ venue.chase_win_pct }}%</strong><small>{{ venue.completed_matches }} completed</small></div></div>
+        <div class="col-6 col-md-3"><div class="intel-stat"><span>Boundary rate</span><strong>{{ venue.boundary_rate }}%</strong></div></div>
+    </div>
+</section>
+{% endif %}
+
+{% if intelligence.team_a_patterns and intelligence.team_b_patterns %}
+<section class="mb-4" aria-labelledby="scenario-heading">
+    <h2 id="scenario-heading" class="h4 mb-2">Historical Scenarios</h2>
+    <div class="row g-3">
+        {% for pattern in [intelligence.team_a_patterns, intelligence.team_b_patterns] %}
+        <div class="col-12 col-md-6">
+            <div class="border rounded p-3 h-100">
+                <h3 class="h6">{{ pattern.team }}</h3>
+                <div class="d-flex justify-content-between gap-2 py-1 border-bottom"><span>At this venue</span><strong>{{ pattern.wins_overall }}/{{ pattern.matches_played }} wins</strong></div>
+                <div class="d-flex justify-content-between gap-2 py-1 border-bottom"><span>Scoring 180+</span><strong>{{ pattern.highlights.bat_180_plus.win_pct }}% <small>({{ pattern.highlights.bat_180_plus.matches }})</small></strong></div>
+                <div class="d-flex justify-content-between gap-2 py-1"><span>Chasing 180+</span><strong>{{ pattern.highlights.chase_180_plus.win_pct }}% <small>({{ pattern.highlights.chase_180_plus.matches }})</small></strong></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="small text-muted mt-2 mb-0">Numbers in parentheses are sample sizes. These are historical scenarios, not predictions.</p>
+</section>
+{% endif %}
+
+{% if h2h and (h2h.top_scorers or h2h.top_wickets) %}
+<section class="mb-4" aria-labelledby="players-heading">
+    <h2 id="players-heading" class="h4 mb-2">Historical Key Performers</h2>
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="table-responsive border rounded h-100">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th colspan="4">Top run scorers</th></tr><tr><th>Player</th><th>Runs</th><th>Avg</th><th>SR</th></tr></thead>
+                    <tbody>{% for player in h2h.top_scorers[:5] %}<tr><td>{{ player.name }}</td><td>{{ player.runs }}</td><td>{{ player.avg }}</td><td>{{ player.sr }}</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="table-responsive border rounded h-100">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th colspan="4">Top wicket takers</th></tr><tr><th>Player</th><th>Wkts</th><th>Avg</th><th>Eco</th></tr></thead>
+                    <tbody>{% for player in h2h.top_wickets[:5] %}<tr><td>{{ player.name }}</td><td>{{ player.wickets }}</td><td>{{ player.avg }}</td><td>{{ player.eco }}</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endif %}
+
+<p class="small text-muted">Live match facts come from the configured score provider. Analytical statistics come only from the Matchup Matrix database and do not guarantee outcomes.</p>
+
+<style>
+.intel-stat {
+    min-height: 96px;
+    height: 100%;
+    padding: 12px;
+    border: 1px solid var(--mm-border, #dee2e6);
+    border-radius: 6px;
+    background: var(--mm-surface, #fff);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+}
+.intel-stat span { color: var(--mm-muted, #6c757d); font-size: 0.78rem; }
+.intel-stat strong { font-size: 1.45rem; line-height: 1.25; }
+.intel-stat small { color: var(--mm-muted, #6c757d); }
+.intel-stat-win { border-color: rgba(25, 135, 84, 0.4); background: rgba(25, 135, 84, 0.08); }
+.intel-stat-loss { border-color: rgba(220, 53, 69, 0.35); background: rgba(220, 53, 69, 0.07); }
+@media (max-width: 575.98px) {
+    .intel-stat { min-height: 88px; padding: 10px 6px; }
+    .intel-stat strong { font-size: 1.2rem; }
+}
+</style>
+
+<script>
+(function () {
+    const endpoint = {{ url_for('api_match_live', match_id=fixture.id)|tojson }};
+    const statusEl = document.getElementById('live-status');
+    const scoresEl = document.getElementById('live-scores');
+    const tossEl = document.getElementById('toss-info');
+    const updatedEl = document.getElementById('live-updated');
+    const badgeEl = document.getElementById('live-badge');
+    const lineupEl = document.getElementById('lineup-list');
+    const lineupStateEl = document.getElementById('lineup-state');
+
+    function renderLineups(lineups) {
+        if (!lineups || !lineups.length) return;
+        lineupEl.replaceChildren();
+        lineups.forEach(function (lineup) {
+            const column = document.createElement('div');
+            column.className = 'col-12 col-md-6';
+            const panel = document.createElement('div');
+            panel.className = 'border rounded p-3 h-100';
+            const heading = document.createElement('h3');
+            heading.className = 'h6';
+            heading.textContent = lineup.team;
+            const list = document.createElement('ol');
+            list.className = 'row row-cols-1 row-cols-sm-2 small mb-0 ps-4';
+            (lineup.players || []).forEach(function (player) {
+                const item = document.createElement('li');
+                item.className = 'col mb-1';
+                item.textContent = player;
+                list.appendChild(item);
+            });
+            panel.append(heading, list);
+            column.appendChild(panel);
+            lineupEl.appendChild(column);
+        });
+        lineupStateEl.textContent = 'Confirmed';
+        lineupStateEl.className = 'badge bg-success';
+    }
+
+    function render(match) {
+        statusEl.textContent = match.status || 'Status unavailable';
+        const isLive = /live|innings|need|trail|lead/i.test(match.status || '');
+        badgeEl.style.display = isLive ? 'inline-block' : 'none';
+        scoresEl.replaceChildren();
+        (match.score || []).forEach(function (innings) {
+            const column = document.createElement('div');
+            column.className = 'col-12 col-sm-6';
+            const score = document.createElement('div');
+            score.className = 'border rounded p-3';
+            score.textContent = `${innings.inning || 'Innings'}: ${innings.r ?? '-'} / ${innings.w ?? '-'} (${innings.o ?? '-'} ov)`;
+            column.appendChild(score);
+            scoresEl.appendChild(column);
+        });
+        tossEl.textContent = match.toss_winner
+            ? `${match.toss_winner} won the toss${match.toss_choice ? ` and chose to ${match.toss_choice}` : ''}.`
+            : 'Toss information is not available yet.';
+        renderLineups(match.lineups);
+        updatedEl.textContent = `Updated ${new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+    }
+
+    function refresh() {
+        fetch(endpoint, {headers: {'Accept': 'application/json'}})
+            .then(function (response) { if (!response.ok) throw new Error('Live feed unavailable'); return response.json(); })
+            .then(render)
+            .catch(function () { updatedEl.textContent = 'Using last available update'; });
+    }
+    refresh();
+    window.setInterval(refresh, 60000);
+})();
+</script>
+
+{% if report_pending %}
+<script>
+(function () {
+    var pending = document.getElementById('report-pending-probable') || document.getElementById('report-pending-analysis');
+    if (!pending) return;
+    var endpoint = {{ url_for('api_match_report', match_id=fixture.id)|tojson }};
+    var attempts = 0;
+    function poll() {
+        fetch(endpoint, {headers: {'Accept': 'application/json'}})
+            .then(function (response) { if (!response.ok) throw new Error('Report feed unavailable'); return response.json(); })
+            .then(function (data) {
+                if (data.status === 'ready') {
+                    window.location.reload();
+                    return;
+                }
+                attempts += 1;
+                if (attempts > 120) { // give up after ~20 minutes, user can refresh manually
+                    var note = document.createElement('div');
+                    note.className = 'small text-muted mt-2';
+                    note.textContent = 'Report generation is taking longer than expected — refresh the page to retry.';
+                    pending.appendChild(note);
+                    return;
+                }
+                window.setTimeout(poll, 10000);
+            })
+            .catch(function () { window.setTimeout(poll, 10000); });
+    }
+    poll();
+})();
+</script>
+{% endif %}
+{% endblock %}

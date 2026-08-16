@@ -1,12 +1,32 @@
 from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from cricket_analytics_core import CricketAnalytics
+from entity_resolution_agent import EntityResolutionAgent
+from fixture_service import FixtureService
+from franchise_lineage_agent import FranchiseLineageAgent
+from match_intelligence import build_match_intelligence
+from report_cache import ReportCache
 import os
+import time
 import warnings
 import gc
 import sys
 import pickle
 import threading
+import queue
 from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Optional OpenAI imports — available when OPENAI_API_KEY is set in .env
+try:
+    from openai_research_agent import OpenAIResearchAgent
+    _OAI_AGENT = OpenAIResearchAgent() if os.environ.get("OPENAI_API_KEY") else None
+except Exception:
+    _OAI_AGENT = None
 
 # Suppress pandas warnings to reduce memory overhead
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
@@ -43,8 +63,62 @@ LEAGUE_CSVS = {
 }
 
 analytics_cache = {}
+_probable_xi_cache = ReportCache("data/cache/reports/probable_xi")  # match_id -> report dict, TTL 6h
+_match_analysis_cache = ReportCache("data/cache/reports/match_analysis")  # match_id -> report dict, TTL 6h
 stats_cache = {}        # { (league, func, min_innings, innings_filter): DataFrame }
 PICKLE_CACHE_DIR = Path('data/cache')
+fixture_service = FixtureService()
+match_intelligence_cache = {}
+
+# ---------------------------------------------------------------------------
+# Background AI report worker. Probable-XI + match-analysis are expensive OpenAI
+# calls; running them inline makes the page block for 10-40s. Instead the page
+# renders instantly from the file-backed cache and enqueues missing reports,
+# which a single daemon worker computes off-request. Pre-warm fills the cache
+# ahead of time so the first visit is usually already fast.
+# ---------------------------------------------------------------------------
+_report_queue = queue.Queue()
+_report_in_flight = set()
+_report_lock = threading.Lock()
+
+
+def enqueue_report(match_id):
+    match_id = str(match_id)
+    with _report_lock:
+        if match_id in _report_in_flight:
+            return
+        _report_in_flight.add(match_id)
+    _report_queue.put(match_id)
+
+
+def _report_worker_loop():
+    while True:
+        match_id = _report_queue.get()
+        try:
+            compute_match_report(match_id)
+        except Exception as exc:
+            print(f"Background report failed for {match_id}: {exc}")
+        finally:
+            with _report_lock:
+                _report_in_flight.discard(match_id)
+
+
+def _start_report_worker():
+    thread = threading.Thread(target=_report_worker_loop, daemon=True, name="report-worker")
+    thread.start()
+    return thread
+
+
+def report_gate_open(fixture):
+    """True when AI prediction is applicable for this fixture right now."""
+    if _OAI_AGENT is None:
+        return False
+    if not fixture:
+        return False
+    if fixture.get("lineups"):
+        return False
+    ha = fixture.get("hours_to_start")
+    return ha is not None and 0 < ha <= 24
 
 # --- Player alias map: league-wise { "global":{...}, "ipl":{...}, ... } ---
 def _load_player_aliases():
@@ -59,6 +133,34 @@ def _load_player_aliases():
     return {}
 
 PLAYER_ALIASES = _load_player_aliases()
+
+def _load_entity_aliases():
+    try:
+        import json
+        path = Path('data/entity_aliases.json')
+        if path.exists():
+            with open(path, encoding='utf-8') as handle:
+                return json.load(handle)
+    except Exception as e:
+        print(f"Could not load entity aliases: {e}")
+    return {}
+
+ENTITY_ALIASES = _load_entity_aliases()
+entity_resolution_agent = EntityResolutionAgent(PLAYER_ALIASES, ENTITY_ALIASES)
+
+def _load_franchise_lineages():
+    try:
+        import json
+        path = Path('data/franchise_lineages.json')
+        if path.exists():
+            with open(path, encoding='utf-8') as handle:
+                return json.load(handle)
+    except Exception as e:
+        print(f"Could not load franchise lineages: {e}")
+    return {}
+
+FRANCHISE_LINEAGES = _load_franchise_lineages()
+franchise_lineage_agent = FranchiseLineageAgent(FRANCHISE_LINEAGES)
 
 def get_aliases_for_league(league):
     """Merge global aliases + current league aliases (league overrides global)."""
@@ -229,6 +331,22 @@ def get_analytics():
     except Exception as e:
         print(f"System error in get_analytics: {e}")
         return None, None, f"System error: {str(e)}"
+
+def get_analytics_for_league(league):
+    """Load one explicit league for fixture intelligence without changing the session."""
+    avail = available_leagues()
+    if league not in avail:
+        return None
+    if league in analytics_cache:
+        return analytics_cache[league]
+    csv_path = avail[league]
+    analytics = _load_from_pickle(league) if _pickle_is_valid(league, csv_path) else None
+    if analytics is None:
+        analytics = CricketAnalytics(csv_path)
+        _save_to_pickle(league, analytics)
+    _apply_venue_normalization(analytics, league)
+    analytics_cache[league] = analytics
+    return analytics
 
 @app.route('/')
 def home():
@@ -1113,6 +1231,308 @@ def user_guide():
         <p style="color: #666; font-size: 12px;">Error: {str(e)}</p>
         """
 
+@app.route("/matches")
+def matches_page():
+    """List only supported league fixtures for the selected date."""
+    from datetime import date
+
+    selected_date = request.args.get("date", date.today().isoformat())
+    selected_league = get_league()
+    return render_template(
+        "matches.html",
+        matches=fixture_service.list_matches(selected_date, league=selected_league),
+        selected_date=selected_date,
+        provider_configured=fixture_service.provider.configured,
+        league=selected_league,
+        leagues=available_leagues(),
+    )
+
+def _compute_probable_xi(match_id, fixture):
+    """Predict the probable XI (OpenAI) and persist it to the file cache."""
+    try:
+        ha = fixture.get("hours_to_start")
+        if not report_gate_open(fixture):
+            return None
+        series_id = fixture.get("series_id") or ""
+        squads = fixture_service.get_series_squad(series_id)
+        if series_id:
+            squad_a = [p for p in squads if p.get("teamName") == fixture.get("team_a")]
+            squad_b = [p for p in squads if p.get("teamName") == fixture.get("team_b")]
+            # CricketData may not publish squad data for a series (e.g. CPL /
+            # The Hundred 2026). In that case squad_a/squad_b stay empty and
+            # the agent web-searches each team's current squad instead. When
+            # provider squads exist they are the ONLY allowed player pool.
+            if squad_a and squad_b:
+                analytics = get_analytics_for_league(fixture["league"])
+                a_analytics = analytics.get_player_form(fixture["team_a"]) if analytics else {}
+                b_analytics = analytics.get_player_form(fixture["team_b"]) if analytics else {}
+            else:
+                analytics = get_analytics_for_league(fixture["league"])
+                a_analytics = {}
+                b_analytics = {}
+            pi = _OAI_AGENT.predict_probable_xi(
+                league=fixture["league"],
+                team_a=fixture["team_a"],
+                team_b=fixture["team_b"],
+                start_time_ist=fixture.get("starts_at_ist", ""),
+                hours_to_start=ha,
+                squad_a=squad_a,
+                squad_b=squad_b,
+                analytics_a=a_analytics,
+                analytics_b=b_analytics,
+                enable_web_search=True,
+            )
+            # Cache successful predictions only. A failure (empty XIs,
+            # transport error) must NOT be cached, otherwise the page is
+            # stuck showing an empty section for the full 6h TTL.
+            if pi and (pi.get("xi_team_a") or pi.get("xi_team_b")):
+                _probable_xi_cache.set(match_id, pi)
+                return pi
+    except Exception as exc:
+        print(f"Probable XI prediction failed for {match_id}: {exc}")
+    return None
+
+
+def _compute_match_analysis(match_id, fixture, probable_xi):
+    """Compute the per-player analytics and OpenAI match report, persist it."""
+    try:
+        analytics = get_analytics_for_league(fixture["league"])
+        if analytics is None or _OAI_AGENT is None:
+            return None
+        players = sorted(set(
+            analytics.df["batsman"].dropna().astype(str).tolist()
+            + analytics.df["bowler"].dropna().astype(str).tolist()
+        ))
+        # Resolve team names to CSV names so h2h/venue lookups work.
+        resolver = entity_resolution_agent
+        teams_csv = sorted(set(analytics.df["batting_team"].dropna().astype(str).tolist()))
+        team_a_csv = resolver.resolve_team(fixture["team_a"], teams_csv, fixture["league"])["resolved"]
+        team_b_csv = resolver.resolve_team(fixture["team_b"], teams_csv, fixture["league"])["resolved"]
+        venues_csv = sorted(set(analytics.df["venue"].dropna().astype(str).tolist()))
+        venue_csv = resolver.resolve_venue(fixture.get("venue"), venues_csv, fixture["league"])["resolved"]
+
+        bundles = []
+        for name in (probable_xi.get("xi_team_a") or []):
+            resolved = resolver.resolve_player(name, players, fixture["league"])["resolved"] or name
+            bundles.append(analytics.get_player_match_analytics(
+                resolved, team=team_b_csv, venue=venue_csv))
+            bundles[-1]["probable_name"] = name
+            bundles[-1]["team"] = fixture["team_a"]
+        for name in (probable_xi.get("xi_team_b") or []):
+            resolved = resolver.resolve_player(name, players, fixture["league"])["resolved"] or name
+            bundles.append(analytics.get_player_match_analytics(
+                resolved, team=team_a_csv, venue=venue_csv))
+            bundles[-1]["probable_name"] = name
+            bundles[-1]["team"] = fixture["team_b"]
+
+        venue_stats = {}
+        if venue_csv:
+            vc = analytics.get_venue_characteristics(venue_csv)
+            if vc:
+                venue_stats = vc
+        team_h2h = {}
+        if team_a_csv and team_b_csv:
+            view = franchise_lineage_agent.analytics_view(
+                analytics, fixture["league"], [team_a_csv, team_b_csv])
+            team_h2h = view.get_team_vs_team(team_a_csv, team_b_csv) or {}
+
+        match_analysis = _OAI_AGENT.analyze_match_prediction(
+            league=fixture["league"],
+            team_a=fixture["team_a"],
+            team_b=fixture["team_b"],
+            venue=fixture.get("venue", ""),
+            start_time_ist=fixture.get("starts_at_ist", ""),
+            hours_to_start=fixture.get("hours_to_start"),
+            probable_xi_a=probable_xi.get("xi_team_a") or [],
+            probable_xi_b=probable_xi.get("xi_team_b") or [],
+            player_analytics=bundles,
+            venue_stats=venue_stats,
+            team_h2h=team_h2h,
+            enable_web_search=True,
+        )
+        if match_analysis and not match_analysis.get("failed"):
+            _match_analysis_cache.set(match_id, match_analysis)
+            return match_analysis
+        return match_analysis
+    except Exception as exc:
+        print(f"Match analysis failed for {match_id}: {exc}")
+    return None
+
+
+def compute_match_report(match_id):
+    """Compute (or load from cache) the probable XI + match analysis for a match.
+
+    Returns a dict {"probable_xi": ...|None, "match_analysis": ...|None}. Safe
+    to call from the background worker or inline; results persist to disk so a
+    later request renders instantly.
+    """
+    fixture = fixture_service.get_match(match_id)
+    if not fixture:
+        return {"probable_xi": None, "match_analysis": None}
+    fixture = fixture_service.live_match(match_id) or fixture
+
+    probable_xi = _probable_xi_cache.get(match_id)
+    match_analysis = _match_analysis_cache.get(match_id)
+
+    # Official Playing XI published -> prediction is no longer relevant.
+    if fixture.get("lineups"):
+        return {"probable_xi": None, "match_analysis": None}
+
+    if probable_xi is None and report_gate_open(fixture):
+        probable_xi = _compute_probable_xi(match_id, fixture)
+
+    if probable_xi and (probable_xi.get("xi_team_a") or probable_xi.get("xi_team_b")):
+        if match_analysis is None:
+            match_analysis = _compute_match_analysis(match_id, fixture, probable_xi)
+
+    return {"probable_xi": probable_xi, "match_analysis": match_analysis}
+
+
+def prewarm_reports():
+    """Enqueue every upcoming match that is inside the prediction gate and not
+    already fully computed, so the report is ready before a user visits."""
+    enqueued = 0
+    try:
+        for match in fixture_service.list_matches():
+            if not report_gate_open(match):
+                continue
+            if _probable_xi_cache.get(match["id"]) and _match_analysis_cache.get(match["id"]):
+                continue
+            enqueue_report(match["id"])
+            enqueued += 1
+    except Exception as exc:
+        print(f"Pre-warm scan failed: {exc}")
+    if enqueued:
+        print(f"Pre-warm: enqueued {enqueued} report job(s)")
+
+
+def _prewarm_loop():
+    while True:
+        prewarm_reports()
+        time.sleep(6 * 3600)  # refresh pre-warm ~4x per day
+
+
+def _start_background_tasks():
+    thread = threading.Thread(target=_prewarm_loop, daemon=True, name="prewarm-loop")
+    thread.start()
+    return _start_report_worker()
+
+
+@app.route("/matches/<match_id>")
+def match_intelligence_page(match_id):
+    """Show cached live facts beside deterministic historical intelligence."""
+    fixture = fixture_service.get_match(match_id)
+    if not fixture:
+        return render_template("404.html"), 404
+    # The daily schedule cache can lag behind provider corrections (e.g. a franchise
+    # name revised after discovery). Refetch this one match so the header and the
+    # historical analysis always use the freshest known team/venue names.
+    fixture = fixture_service.live_match(match_id) or fixture
+    # CricketData exposes Playing XI on a separate endpoint (/v1/match_squad) that
+    # is not covered by live_match's refresh window for pre-toss matches. Do one
+    # direct squad lookup on first render so a confirmed XI shows without waiting
+    # for the client-side 60s poll.
+    if fixture and not fixture.get("lineups") and fixture_service.provider.configured:
+        try:
+            squad = fixture_service.provider.fetch_squad(str(match_id))
+            if squad:
+                fixture = dict(fixture)
+                fixture["lineups"] = fixture_service._squad_to_lineups(squad)
+                # Persist the refreshed lineups back into the live cache so the
+                # subsequent /api/v1/matches/<id>/live poll doesn't drop them.
+                fixture_service._live_cache[str(match_id)] = (time.time(), fixture)
+        except Exception as exc:
+            print(f"Squad fetch failed for {match_id}: {exc}")
+
+    # ---- AI report (probable XI + match analysis), instant + background ----
+    # Read from the file-backed cache; render immediately. If the report is not
+    # cached yet and the match is inside the prediction gate, enqueue the work
+    # for the background worker and let the client poll the report endpoint.
+    probable_xi = _probable_xi_cache.get(match_id)
+    match_analysis = _match_analysis_cache.get(match_id)
+    report_pending = (
+        report_gate_open(fixture)
+        and (probable_xi is None or match_analysis is None)
+    )
+    if report_pending:
+        enqueue_report(match_id)
+
+    cache_key = (fixture.get("team_a"), fixture.get("team_b"), fixture.get("venue"))
+    cache_entry = match_intelligence_cache.get(match_id)
+    intelligence = None
+    if cache_entry and cache_entry.get("key") == cache_key:
+        intelligence = cache_entry.get("intelligence")
+    if intelligence is None:
+        try:
+            analytics = get_analytics_for_league(fixture["league"])
+            if analytics is not None:
+                intelligence = build_match_intelligence(
+                    analytics,
+                    fixture,
+                    resolver=entity_resolution_agent,
+                    lineage_agent=franchise_lineage_agent,
+                    league=fixture["league"],
+                )
+                match_intelligence_cache[match_id] = {"key": cache_key, "intelligence": intelligence}
+        except Exception as exc:
+            print(f"Match intelligence failed for {match_id}: {exc}")
+    return render_template(
+        "match_intelligence.html",
+        fixture=fixture,
+        intelligence=intelligence,
+        probable_xi=probable_xi,
+        match_analysis=match_analysis,
+        report_pending=report_pending,
+        league=fixture["league"],
+        leagues=available_leagues(),
+    )
+
+@app.route("/api/v1/matches/today")
+def api_matches_today():
+    """Return today's supported fixtures from the shared provider cache."""
+    league = request.args.get("league")
+    matches = fixture_service.today(league=league)
+    return jsonify({"matches": matches, "count": len(matches)})
+
+@app.route("/api/v1/matches/<match_id>/live")
+def api_match_live(match_id):
+    """Return one supported match's cached live state."""
+    match = fixture_service.live_match(match_id)
+    if not match:
+        return jsonify({"error": "Supported match not found."}), 404
+    response = jsonify(match)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+@app.route("/api/v1/matches/<match_id>/report")
+def api_match_report(match_id):
+    """Return the AI report status for a match, for client-side polling.
+
+    status: "ready" (report fully cached), "computing" (work enqueued/running),
+    "unavailable" (out of prediction gate or no OpenAI configured).
+    """
+    probable_xi = _probable_xi_cache.get(match_id)
+    match_analysis = _match_analysis_cache.get(match_id)
+    if probable_xi and match_analysis:
+        return jsonify({
+            "status": "ready",
+            "probable_xi": probable_xi,
+            "match_analysis": match_analysis,
+        })
+    fixture = fixture_service.get_match(match_id)
+    if fixture and report_gate_open(fixture):
+        enqueue_report(match_id)
+        return jsonify({
+            "status": "computing",
+            "probable_xi": probable_xi,
+            "match_analysis": match_analysis,
+        })
+    return jsonify({
+        "status": "unavailable",
+        "probable_xi": probable_xi,
+        "match_analysis": match_analysis,
+    })
+
 # Health check endpoint for monitoring
 @app.route('/health')
 def health_check():
@@ -1208,6 +1628,10 @@ def not_found_error(error):
 def internal_error(error):
     """Handle 500 errors"""
     return render_template('500.html'), 500
+
+# Start the background AI-report worker + pre-warm loop (daemon threads). They
+# are harmless if the app is imported for tests or by a WSGI server.
+_start_background_tasks()
 
 # PythonAnywhere specific configuration
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+{
+  "_note": "Verified provider-to-CSV aliases only. Do not add franchise mappings unless historical continuity is confirmed.",
+  "teams": {
+    "global": {},
+    "cpl": {
+      "saint lucia kings": "St Lucia Kings"
+    }
+  },
+  "venues": {
+    "global": {},
+    "cpl": {
+      "daren sammy national cricket stadium, gros islet, st lucia": "Daren Sammy National Cricket Stadium"
+    }
+  }
+}

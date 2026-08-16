@@ -1,0 +1,18 @@
+{
+  "_note": "Verified franchise name histories. Canonical names are current names. Add mappings only after human verification.",
+  "cpl": {
+    "St Lucia Kings": [
+      "St Lucia Kings",
+      "St Lucia Stars",
+      "St Lucia Zouks"
+    ],
+    "Barbados Royals": [
+      "Barbados Royals",
+      "Barbados Tridents"
+    ],
+    "Trinbago Knight Riders": [
+      "Trinbago Knight Riders",
+      "Trinidad & Tobago Red Steel"
+    ]
+  }
+}

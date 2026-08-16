@@ -16,8 +16,12 @@ LEAGUE_CSVS = {
     "npl":         "data/all_matches_NPL.csv",
     "ilt":         "data/all_matches_ilt.csv",
     "mlc":         "data/all_matches_MLC.csv",
+    "psl":         "data/all_matches_psl.csv",
+    "sat20":       "data/all_matches_sat20.csv",
     "the100":      "data/all_matches_the100.csv",
     "the100women": "data/all_matches_the100women.csv",
+    "wbb":         "data/all_matches_wbb.csv",
+    "wpl":         "data/all_matches_wpl.csv",
 }
 
 league_players = {}

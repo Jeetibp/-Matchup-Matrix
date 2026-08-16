@@ -9,7 +9,7 @@ git checkout --orphan _hf_tmp
 # Remove any binary image files HuggingFace rejects
 git rm --cached static/css/background.png 2>$null
 git add .gitattributes .gitignore Dockerfile README.md
-git add app.py cricket_analytics_core.py gunicorn.conf.py pyproject.toml requirements.txt runtime.txt build.sh
+git add app.py cricket_analytics_core.py entity_resolution_agent.py fixture_service.py franchise_lineage_agent.py match_intelligence.py openai_research_agent.py gunicorn.conf.py pyproject.toml requirements.txt runtime.txt build.sh
 git add data/ templates/
 # Stage static but exclude PNG (HF uses Xet for images, not LFS)
 git add static/css/style.css

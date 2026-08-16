@@ -591,6 +591,304 @@ class CricketAnalytics:
         except Exception:
             return []
 
+    def get_player_form(self, player, last_n=10):
+        """Return a compact last-N-innings form summary for a player.
+
+        Used to feed OpenAI probable-XI predictions. Returns a dict with:
+          - role: 'batsman', 'bowler', or 'allrounder' (inferred from data volume)
+          - batting: last N innings {date, runs, balls, sr, opp, venue, dismissed}
+          - bowling: last N bowling innings {date, balls, runs, wkts, eco, opp, venue}
+          - aggregate: { matches, total_runs, sr, total_wkts, eco }
+        All values defensively defaulted to 0 / [] on any error.
+        """
+        result = {'role': 'batsman', 'batting': [], 'bowling': [], 'aggregate': {}}
+        try:
+            df = self.df
+            # Resolve name via case-insensitive match in case provider uses different casing
+            bat_match = None
+            bowl_match = None
+            try:
+                bat_vals = df['batsman'].dropna().astype(str).unique()
+                bowl_vals = df['bowler'].dropna().astype(str).unique()
+                for v in bat_vals:
+                    if v.lower() == player.lower():
+                        bat_match = v; break
+                for v in bowl_vals:
+                    if v.lower() == player.lower():
+                        bowl_match = v; break
+            except Exception:
+                pass
+            bat_name = bat_match or player
+            bowl_name = bowl_match or player
+
+            # Batting innings
+            try:
+                bdf = df[df['batsman'] == bat_name]
+                if not bdf.empty:
+                    per_inn = bdf.groupby(['match_id', 'batting_team', 'bowling_team', 'venue'],
+                                          observed=True).agg(
+                        runs=('runs_of_bat', 'sum'),
+                        balls=('runs_of_bat', 'size'),
+                        fours=('isFour', 'sum'),
+                        sixes=('isSix', 'sum'),
+                        dismissed=('player_dismissed', lambda s: int((s == bat_name).sum())),
+                    ).reset_index()
+                    if 'start_date' in bdf.columns:
+                        dates = bdf.groupby('match_id', observed=True)['start_date'].first()
+                        per_inn['date'] = per_inn['match_id'].map(dates)
+                    order_col = 'date' if 'date' in per_inn.columns else 'match_id'
+                    per_inn = per_inn.sort_values(order_col, ascending=False).head(last_n)
+                    batting_rows = []
+                    for _, r in per_inn.iterrows():
+                        sr = round(float(r['runs']) * 100.0 / r['balls'], 2) if r['balls'] else 0.0
+                        batting_rows.append({
+                            'date': str(r.get('date', ''))[:10] if pd.notna(r.get('date', '')) else '',
+                            'runs': int(r['runs']),
+                            'balls': int(r['balls']),
+                            'sr': sr,
+                            '4s': int(r['fours']),
+                            '6s': int(r['sixes']),
+                            'opp': str(r.get('bowling_team', '')),
+                            'venue': str(r['venue']),
+                            'out': bool(r['dismissed']),
+                        })
+                    result['batting'] = batting_rows
+            except Exception as e:
+                print(f"get_player_form batting error for {player}: {e}")
+
+            # Bowling innings
+            try:
+                bwdf = df[df['bowler'] == bowl_name]
+                if not bwdf.empty:
+                    per_inn_b = bwdf.groupby(['match_id', 'bowling_team', 'batting_team', 'venue'],
+                                             observed=True).agg(
+                        balls=('isBowlerWk', 'size'),
+                        runs=('total_run', 'sum'),
+                        wkts=('isBowlerWk', 'sum'),
+                    ).reset_index()
+                    if 'start_date' in bwdf.columns:
+                        dates_b = bwdf.groupby('match_id', observed=True)['start_date'].first()
+                        per_inn_b['date'] = per_inn_b['match_id'].map(dates_b)
+                    order_col = 'date' if 'date' in per_inn_b.columns else 'match_id'
+                    per_inn_b = per_inn_b.sort_values(order_col, ascending=False).head(last_n)
+                    bowling_rows = []
+                    for _, r in per_inn_b.iterrows():
+                        overs = r['balls'] / 6.0
+                        eco = round(float(r['runs']) / overs, 2) if overs else 0.0
+                        bowling_rows.append({
+                            'date': str(r.get('date', ''))[:10] if pd.notna(r.get('date', '')) else '',
+                            'balls': int(r['balls']),
+                            'runs': int(r['runs']),
+                            'wkts': int(r['wkts']),
+                            'eco': eco,
+                            'opp': str(r.get('batting_team', '')),
+                            'venue': str(r['venue']),
+                        })
+                    result['bowling'] = bowling_rows
+            except Exception as e:
+                print(f"get_player_form bowling error for {player}: {e}")
+
+            # Role inference
+            bat_inn = len(result['batting'])
+            bowl_inn = len(result['bowling'])
+            if bat_inn > 0 and bowl_inn > 0:
+                result['role'] = 'allrounder'
+            elif bowl_inn > 0:
+                result['role'] = 'bowler'
+            else:
+                result['role'] = 'batsman'
+
+            # Aggregate
+            agg = {'matches': max(bat_inn, bowl_inn)}
+            if bat_inn:
+                total_runs = sum(r['runs'] for r in result['batting'])
+                total_balls = sum(r['balls'] for r in result['batting'])
+                agg['runs'] = total_runs
+                agg['sr'] = round(total_runs * 100.0 / total_balls, 2) if total_balls else 0.0
+            if bowl_inn:
+                total_wkts = sum(r['wkts'] for r in result['bowling'])
+                total_balls_b = sum(r['balls'] for r in result['bowling'])
+                total_runs_b = sum(r['runs'] for r in result['bowling'])
+                overs_total = total_balls_b / 6.0
+                agg['wkts'] = total_wkts
+                agg['eco'] = round(total_runs_b / overs_total, 2) if overs_total else 0.0
+            result['aggregate'] = agg
+        except Exception as e:
+            print(f"get_player_form critical error for {player}: {e}")
+        return result
+
+    def get_player_innings_split(self, player, ptype='batsman'):
+        """Return a player's performance split by innings (1st vs 2nd).
+
+        Returns a dict like:
+            {
+                'batting': {1: {matches, runs, balls, sr}, 2: {...}},
+                'bowling': {1: {matches, balls, runs, wkts, eco}, 2: {...}},
+            }
+        Each innings map is keyed by int innings number. Missing data -> empty dict.
+        """
+        result = {'batting': {}, 'bowling': {}}
+        try:
+            df = self.df
+            if ptype in ('batsman', 'both'):
+                bdf = df[df['batsman'] == player]
+                for innings in (1, 2):
+                    sub = bdf[bdf['innings'] == innings]
+                    if sub.empty:
+                        continue
+                    per = sub.groupby(['match_id'], observed=True).agg(
+                        runs=('runs_of_bat', 'sum'),
+                        balls=('runs_of_bat', 'size'),
+                    )
+                    if per.empty:
+                        continue
+                    total_runs = int(per['runs'].sum())
+                    total_balls = int(per['balls'].sum())
+                    result['batting'][innings] = {
+                        'matches': int(per.shape[0]),
+                        'runs': total_runs,
+                        'balls': total_balls,
+                        'sr': round(total_runs * 100.0 / total_balls, 2) if total_balls else 0.0,
+                    }
+            if ptype in ('bowler', 'both'):
+                bwdf = df[df['bowler'] == player]
+                for innings in (1, 2):
+                    sub = bwdf[bwdf['innings'] == innings]
+                    if sub.empty:
+                        continue
+                    per = sub.groupby(['match_id'], observed=True).agg(
+                        balls=('isBowlerWk', 'size'),
+                        runs=('total_run', 'sum'),
+                        wkts=('isBowlerWk', 'sum'),
+                    )
+                    if per.empty:
+                        continue
+                    total_balls = int(per['balls'].sum())
+                    total_runs = int(per['runs'].sum())
+                    total_wkts = int(per['wkts'].sum())
+                    overs = total_balls / 6.0
+                    result['bowling'][innings] = {
+                        'matches': int(per.shape[0]),
+                        'balls': total_balls,
+                        'runs': total_runs,
+                        'wkts': total_wkts,
+                        'eco': round(total_runs / overs, 2) if overs else 0.0,
+                    }
+        except Exception as e:
+            print(f"get_player_innings_split error for {player}: {e}")
+        return result
+
+    def get_player_match_analytics(self, player, team=None, venue=None, last_n=10):
+        """Bundle every analytics signal the AI analysis agent needs for one player.
+
+        Uses the CSV name exactly as stored (caller should resolve the probable-XI
+        name via EntityResolutionAgent first). Returns:
+            {
+                'name': player,
+                'role': 'batsman' | 'bowler' | 'allrounder',
+                'form': {...get_player_form()...},
+                'h2h': {...get_player_vs_team()...} | None,
+                'venue': {...get_player_at_venue()...} | None,
+                'innings_split': {...get_player_innings_split()...},
+            }
+        Only the signals that could be computed are included; the agent sees
+        'not available' for anything missing.
+        """
+        bundle = {'name': player}
+        try:
+            form = self.get_player_form(player, last_n=last_n)
+            role = form.get('role', 'batsman')
+            bundle['role'] = role
+            bundle['form'] = form
+            ptype = role if role in ('batsman', 'bowler') else 'both'
+            bundle['innings_split'] = self.get_player_innings_split(player, ptype=ptype)
+            if team:
+                h2h = self.get_player_vs_team(player, team, ptype=ptype)
+                if h2h.get('matches', 0) > 0:
+                    bundle['h2h'] = {k: v for k, v in h2h.items()}
+            if venue:
+                venue_stats = self.get_player_at_venue(player, venue, ptype=ptype)
+                if venue_stats.get('matches', 0) > 0:
+                    bundle['venue'] = {k: v for k, v in venue_stats.items()}
+        except Exception as e:
+            print(f"get_player_match_analytics error for {player}: {e}")
+        return bundle
+
+    def get_player_vs_team(self, player, team, ptype='batsman'):
+        """Return a player's record against a specific opponent team.
+
+        Used for probable-XI prediction context. ptype='batsman' returns
+        {runs, balls, sr, dismissals, matches} against this team's bowlers.
+        ptype='bowler' returns {balls, runs, wkts, eco, matches} against this team's batters.
+        """
+        try:
+            df = self.df
+            if ptype == 'batsman':
+                subset = df[(df['batsman'] == player) & (df['bowling_team'] == team)]
+                if subset.empty:
+                    return {'matches': 0}
+                runs = int(subset['runs_of_bat'].sum())
+                balls = int(len(subset))
+                wkts_bowler = int(subset[subset['player_dismissed'] == player].shape[0])
+                sr = round(runs * 100.0 / balls, 2) if balls else 0.0
+                return {
+                    'matches': int(subset['match_id'].nunique()),
+                    'runs': runs, 'balls': balls, 'sr': sr, 'dismissals': wkts_bowler,
+                }
+            else:
+                subset = df[(df['bowler'] == player) & (df['batting_team'] == team)]
+                if subset.empty:
+                    return {'matches': 0}
+                balls = int(len(subset))
+                runs = int(subset['total_run'].sum())
+                wkts = int(subset['isBowlerWk'].sum())
+                overs = balls / 6.0
+                eco = round(runs / overs, 2) if overs else 0.0
+                return {
+                    'matches': int(subset['match_id'].nunique()),
+                    'balls': balls, 'runs': runs, 'wkts': wkts, 'eco': eco,
+                }
+        except Exception as e:
+            print(f"get_player_vs_team error for {player} vs {team}: {e}")
+            return {'matches': 0}
+
+    def get_player_at_venue(self, player, venue, ptype='batsman'):
+        """Return a player's record at a specific venue.
+
+        Used for probable-XI prediction context. Same return shape as
+        get_player_vs_team but filtered by venue rather than opponent team.
+        """
+        try:
+            df = self.df[self.df['venue'] == venue]
+            if ptype == 'batsman':
+                subset = df[df['batsman'] == player]
+                if subset.empty:
+                    return {'matches': 0}
+                runs = int(subset['runs_of_bat'].sum())
+                balls = int(len(subset))
+                sr = round(runs * 100.0 / balls, 2) if balls else 0.0
+                dismissals = int(subset[subset['player_dismissed'] == player].shape[0])
+                return {
+                    'matches': int(subset['match_id'].nunique()),
+                    'runs': runs, 'balls': balls, 'sr': sr, 'dismissals': dismissals,
+                }
+            else:
+                subset = df[df['bowler'] == player]
+                if subset.empty:
+                    return {'matches': 0}
+                balls = int(len(subset))
+                runs = int(subset['total_run'].sum())
+                wkts = int(subset['isBowlerWk'].sum())
+                overs = balls / 6.0
+                eco = round(runs / overs, 2) if overs else 0.0
+                return {
+                    'matches': int(subset['match_id'].nunique()),
+                    'balls': balls, 'runs': runs, 'wkts': wkts, 'eco': eco,
+                }
+        except Exception as e:
+            print(f"get_player_at_venue error for {player} @ {venue}: {e}")
+            return {'matches': 0}
+
     def search_players(self, query, ptype='both', limit=10, innings_filter=None):
         try:
             df = self.df
